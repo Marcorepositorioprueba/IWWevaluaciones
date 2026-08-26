@@ -1,0 +1,951 @@
+/* app.css — Estilos compartidos entre docente, padres y admin.
+   Mobile-first. Tailwind via CDN maneja el 90%; aquí está lo custom. */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === Portada animada y entrada con movimiento === */
+.slow-zoom {
+  animation: zoom 20s infinite alternate ease-in-out;
+}
+@keyframes zoom {
+  from { transform: scale(1); }
+  to   { transform: scale(1.05); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+.float-anim {
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); }
+  70% { transform: scale(1); box-shadow: 0 0 0 16px rgba(37, 99, 235, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+
+.glass-container {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.bg-instituto {
+  background:
+    radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.20) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(124, 58, 237, 0.18) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.15) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(245, 158, 11, 0.12) 0px, transparent 50%),
+    linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+/* === Header formal === */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  margin-bottom: 1.5rem;
+}
+
+.app-header-logo {
+  height: 3.5rem;
+  width: 3.5rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.app-header-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-header-titles h1 {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.app-header-titles p {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .app-header { padding: 1.25rem 2rem; }
+  .app-header-logo { height: 4rem; width: 4rem; }
+  .app-header-titles h1 { font-size: 1.5rem; }
+  .app-header-titles p { font-size: 0.875rem; }
+}
+
+/* === Badge de última conexión === */
+.ultimo-acceso {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  background: #f1f5f9;
+  color: #475569;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ultimo-acceso::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #10b981;
+}
+
+/* === Botones de competencia === */
+.rating-row {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: nowrap;
+}
+.rating-btn {
+  min-width: 36px;
+  min-height: 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+  background: #f1f5f9;
+  color: #475569;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+.rating-btn:hover { background: #e2e8f0; }
+.rating-btn.active {
+  background: #2563eb;
+  color: white;
+  border-color: #1d4ed8;
+}
+.rating-btn[data-nivel="1"].active { background: #dc2626; border-color: #b91c1c; }
+.rating-btn[data-nivel="2"].active { background: #f59e0b; border-color: #d97706; }
+.rating-btn[data-nivel="3"].active { background: #10b981; border-color: #059669; }
+.rating-btn[data-nivel="4"].active { background: #047857; border-color: #065f46; }
+
+.rating-btn:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  background: #0f172a;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* === Toasts === */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: #1e293b;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2);
+  z-index: 200;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+  max-width: 90%;
+  text-align: center;
+}
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+.toast.success { background: #10b981; }
+.toast.error   { background: #dc2626; }
+.toast.warning { background: #f59e0b; }
+.toast.info    { background: #2563eb; }
+
+/* === Tabla/lista de captura === */
+.alumno-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  align-items: center;
+  background: white;
+  transition: background 0.15s ease;
+}
+.alumno-card:hover { background: #f8fafc; }
+.alumno-card:last-child { border-bottom: none; }
+.alumno-card.capturado {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.alumno-card-nombre {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 0.95rem;
+  margin: 0;
+}
+.alumno-card-meta {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 0.1rem 0 0;
+}
+
+.alumno-card-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.chip-ok       { background: #d1fae5; color: #065f46; }
+.chip-pendiente{ background: #f1f5f9; color: #475569; }
+.chip-edit     { background: #dbeafe; color: #1e3a8a; }
+.chip-err      { background: #fee2e2; color: #991b1b; }
+.chip-amarillo { background: #fef3c7; color: #92400e; }
+
+.btn-ctx {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-ctx.primary { background: #2563eb; color: white; }
+.btn-ctx.primary:hover { background: #1d4ed8; }
+.btn-ctx.success { background: #059669; color: white; }
+.btn-ctx.success:hover { background: #047857; }
+.btn-ctx.ghost   { background: #f1f5f9; color: #475569; }
+.btn-ctx.ghost:hover { background: #e2e8f0; }
+
+@media (max-width: 640px) {
+  .alumno-card {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .alumno-card-status {
+    justify-content: space-between;
+  }
+}
+
+.compact-input {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: white;
+}
+.compact-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+.compact-input.error {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+.compact-input.error:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* === Panel lateral de edición (mobile-first full-screen) === */
+.panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 150;
+  animation: fadeIn 0.2s ease;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.panel-card {
+  background: white;
+  border-radius: 1.5rem 1.5rem 0 0;
+  width: 100%;
+  max-width: 720px;
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 1.25rem 1.25rem 2rem;
+  box-shadow: 0 -25px 50px -12px rgba(0,0,0,0.25);
+  animation: slideUpPanel 0.3s ease;
+}
+@keyframes slideUpPanel {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@media (min-width: 768px) {
+  .panel-backdrop {
+    align-items: center;
+  }
+  .panel-card {
+    border-radius: 1.5rem;
+    max-width: 540px;
+    margin: 0 1rem;
+  }
+}
+
+.panel-grabber {
+  width: 40px;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 9999px;
+  margin: 0 auto 1rem;
+}
+@media (min-width: 768px) {
+  .panel-grabber { display: none; }
+}
+
+/* === Skeleton de carga === */
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* === Indicador de voz activo === */
+.voice-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 9999px;
+  background: #ef4444;
+  color: white;
+  font-weight: 600;
+  font-size: 0.875rem;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.7; }
+}
+
+.voice-idle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.875rem;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s ease;
+}
+.voice-idle:hover { background: #e2e8f0; }
+
+.voice-cmd-detected {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 9999px;
+  background: #dbeafe;
+  color: #1e3a8a;
+  font-weight: 600;
+  font-size: 0.75rem;
+  animation: pulse 1s ease;
+}
+
+/* === Semáforo chips === */
+.semaforo-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.semaforo-Verde    { background: #d1fae5; color: #065f46; }
+.semaforo-Amarillo { background: #fef3c7; color: #92400e; }
+.semaforo-Rojo     { background: #fee2e2; color: #991b1b; }
+
+/* === Modal === */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease;
+}
+.modal-card {
+  background: white;
+  border-radius: 1rem;
+  max-width: 32rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+  animation: slideUp 0.25s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* === Panel de analítica === */
+.analytics-card {
+  background: white;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  border: 1px solid #e2e8f0;
+}
+
+.kpi-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1024px) { .kpi-grid { grid-template-columns: 1fr 1fr 1fr 1fr; } }
+
+.kpi {
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 110px;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1;
+}
+.kpi-extra {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+.kpi.accent-blue   { border-color: #dbeafe; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); }
+.kpi.accent-green  { border-color: #d1fae5; background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%); }
+.kpi.accent-yellow { border-color: #fef3c7; background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%); }
+.kpi.accent-red    { border-color: #fee2e2; background: linear-gradient(135deg, #fef2f2 0%, #ffffff 100%); }
+.kpi.accent-blue   .kpi-value { color: #1e40af; }
+.kpi.accent-green  .kpi-value { color: #065f46; }
+.kpi.accent-yellow .kpi-value { color: #92400e; }
+.kpi.accent-red    .kpi-value { color: #991b1b; }
+
+.chart-container {
+  position: relative;
+  height: 220px;
+  width: 100%;
+}
+@media (min-width: 768px) {
+  .chart-container { height: 260px; }
+}
+.chart-container.tall {
+  height: 280px;
+}
+@media (min-width: 768px) {
+  .chart-container.tall { height: 320px; }
+}
+
+/* === Helpers de error === */
+.error-msg {
+  display: block;
+  font-size: 0.7rem;
+  color: #dc2626;
+  margin-top: 0.2rem;
+  font-weight: 600;
+}
+
+/* === Loader spinner === */
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* === Navegación admin === */
+.admin-filter {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 768px) {
+  .admin-filter { grid-template-columns: 1fr 1fr 1fr 1fr; }
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+.admin-table th {
+  background: #f8fafc;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+}
+.admin-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.875rem;
+  color: #0f172a;
+}
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table tr:hover td { background: #f8fafc; }
+
+/* === Tarjetas padre === */
+.tarjeta-mes {
+  background: white;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  border: 1px solid #e2e8f0;
+}
+
+.metric-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr 1fr;
+}
+@media (min-width: 768px) { .metric-grid { grid-template-columns: 1fr 1fr 1fr 1fr; } }
+.metric-box {
+  background: #f8fafc;
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+  text-align: center;
+}
+.metric-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+.metric-value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1;
+}
+.metric-extra {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-top: 0.2rem;
+}
+
+/* === Delta comparativo === */
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.delta.up   { background: #d1fae5; color: #065f46; }
+.delta.down { background: #fee2e2; color: #991b1b; }
+.delta.eq   { background: #f1f5f9; color: #475569; }
+
+/* === BLOQUE 3 DIMENSIONES PREESCOLAR (cambio 2026-08-20) ===
+   Reusado por:
+   - frontend/docente (modal): .dim-block, .dim-subaspect, .dim-subaspectos
+   - frontend/padres (card): .chip-triple, .dim-chip, .acordeon-dim-*
+   - frontend/docente (analítica): .dim-bar-wrap
+   Estilos mobile-first; los grids escalan a md+.
+*/
+
+/* Bloque de dimensión (modal docente) */
+.dim-block {
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.75rem;
+}
+.dim-block .rating-row .rating-btn {
+  border-radius: 0.5rem;
+  border: 2px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.85);
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+.dim-block .rating-row .rating-btn.active {
+  background: #1e293b;
+  color: #fff;
+  border-color: #0f172a;
+}
+
+/* Sub-aspectos por dimensión (modal docente) */
+.dim-subaspectos { margin-top: 0.5rem; }
+.dim-subaspectos-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 768px) {
+  .dim-subaspectos-grid { grid-template-columns: 1fr 1fr; }
+}
+.dim-subaspect textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  resize: vertical;
+}
+.dim-subaspect textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.dim-subaspect summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.dim-subaspect summary::-webkit-details-marker { display: none; }
+.dim-subaspect summary .summary-marker {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  margin-right: 0.25rem;
+}
+.dim-subaspect[open] summary .summary-marker { transform: rotate(0deg); }
+.dim-subaspect:not([open]) summary .summary-marker { transform: rotate(-90deg); }
+
+/* Triple chip de dimensión (vista padres) */
+.chip-triple {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 768px) {
+  .chip-triple { grid-template-columns: 1fr 1fr 1fr; }
+}
+.dim-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1px solid #e2e8f0;
+  background: white;
+  transition: transform 0.15s ease;
+}
+.dim-chip.semaforo-Verde    { border-color: #10b981; background: linear-gradient(135deg, #f0fdf4, #ffffff); }
+.dim-chip.semaforo-Amarillo { border-color: #f59e0b; background: linear-gradient(135deg, #fffbeb, #ffffff); }
+.dim-chip.semaforo-Rojo     { border-color: #ef4444; background: linear-gradient(135deg, #fef2f2, #ffffff); }
+.dim-chip.semaforo-sin-dato { border-color: #cbd5e1; background: #f8fafc; }
+.dim-chip-icon {
+  font-size: 1.65rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.dim-chip-body { min-width: 0; flex: 1; }
+.dim-chip-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  margin-bottom: 0.15rem;
+}
+.dim-chip-meta {
+  font-size: 0.7rem;
+  color: #475569;
+  line-height: 1.1;
+}
+
+/* Acordeón por dimensión (vista padres) */
+.acordeon-dim {
+  margin: 0 1rem 1rem;
+}
+.acordeon-dim-item {
+  border-bottom: 1px solid #e2e8f0;
+}
+.acordeon-dim-item:last-child { border-bottom: none; }
+.acordeon-dim-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.acordeon-dim-summary::-webkit-details-marker { display: none; }
+.acordeon-dim-icon { font-size: 1.1rem; }
+.acordeon-dim-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+  flex: 1;
+}
+.acordeon-dim-chev {
+  margin-left: auto;
+  transition: transform 0.15s ease;
+  color: #94a3b8;
+}
+.acordeon-dim-item[open] .acordeon-dim-chev { transform: rotate(180deg); }
+.acordeon-dim-body {
+  padding: 0 0 0.85rem 1.65rem;
+}
+.dim-sub-item {
+  margin-bottom: 0.65rem;
+  padding: 0.45rem 0.6rem;
+  border-left: 3px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.dim-sub-item:last-child { margin-bottom: 0; }
+.dim-sub-tit {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #475569;
+  margin-bottom: 0.15rem;
+}
+.dim-sub-text {
+  font-size: 0.85rem;
+  color: #1e293b;
+  line-height: 1.4;
+  margin: 0;
+  white-space: pre-line;
+}
+
+/* Mini-bar de dimensión (analítica docente) */
+.dim-bar-wrap {
+  background: #f8fafc;
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  min-height: 140px;
+}
+.dim-bar-wrap canvas { max-height: 110px; }
+
+/* ============================================================================
+   Imprimir / PDF (portal docente)
+   Cambio 2026-08-25: bloque @media print para que el botón "Imprimir / PDF"
+   del portal docente genere un PDF limpio (sin login, header, analítica).
+   Patrón replicado del portal padres.
+   ============================================================================ */
+
+@page { size: letter; margin: 1.2cm; }
+
+.print-only { display: none; }
+
+@media print {
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+  }
+
+  /* Esconder todo lo de navegación / interacción */
+  #pantallaPortada,
+  #loginArea,
+  #panelEditar,
+  #modalConfirmacion,
+  #modalErrores,
+  header.app-header,
+  #bannerMesCaptura,
+  #analyticsArea,
+  .no-print { display: none !important; }
+
+  /* Mostrar solo el reporte */
+  .print-only { display: block !important; }
+  #reporteImprimible { padding: 0; }
+
+/* === P39 (2026-08-26): Composición del Índice — chips de pesos === */
+.pesos-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 640px) {
+  .pesos-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.peso-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px;
+  background: #fafafa;
+  border: 1.5px solid;
+  border-radius: 12px;
+  text-align: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.peso-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.peso-nombre {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #52525b;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+.peso-pct {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+  line-height: 1;
+}
+@media print {
+  .pesos-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .peso-chip { background: #fff; box-shadow: none; }
+}
+
+  /* Encabezado institucional */
+  .print-header {
+    border-bottom: 2px solid #18181b;
+    padding-bottom: 0.6cm;
+    margin-bottom: 0.5cm;
+  }
+  .print-header h1 {
+    font-size: 16pt; font-weight: 700; margin: 0;
+  }
+  .print-header h2 {
+    font-size: 12pt; font-weight: 600; margin: 0.2cm 0;
+  }
+  .print-header p {
+    font-size: 10pt; margin: 0.1cm 0;
+  }
+
+  /* Tabla del reporte */
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.4cm 0;
+    font-size: 10pt;
+  }
+  .print-table th,
+  .print-table td {
+    border: 1px solid #18181b;
+    padding: 4px 6px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .print-table thead {
+    background: #f1f5f9 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    display: table-header-group; /* repite header en cada página */
+  }
+  .print-table tr {
+    page-break-inside: avoid; /* evita partir filas entre páginas */
+  }
+  .print-table .obs-cell {
+    max-width: 6cm;
+    word-wrap: break-word;
+  }
+
+  /* Footer + firma */
+  .print-footer {
+    margin-top: 1cm;
+    border-top: 1px solid #94a3b8;
+    padding-top: 0.3cm;
+    font-size: 9pt;
+  }
+  .print-firma {
+    margin-top: 1.5cm;
+    text-align: center;
+    font-size: 10pt;
+  }
+}
