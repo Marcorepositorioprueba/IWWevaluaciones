@@ -1,0 +1,275 @@
+// lib_sheets.gs — Lectura y escritura robusta sobre Google Sheets.
+//
+// Todo el código del proyecto pasa por aquí para acceder a Sheets.
+// Ventajas:
+//   - Error legible si una hoja no existe (en vez de "Cannot read property of undefined")
+//   - Validación de headers contra un esquema declarado
+//   - upsertEvaluacion() evita duplicados por (AlumnoID + Mes + CicloEscolar)
+
+const SHEETS = {
+  CONFIG: {
+    nombre: 'CONFIG',
+    headers: ['TIPO', 'VALOR_ID', 'DESCRIPCION']
+  },
+  ALUMNOS: {
+    nombre: 'ALUMNOS',
+    headers: ['AlumnoID', 'NombreCompleto', 'Grupo', 'Grado', 'MaestroID']
+  },
+  EVALUACIONES: {
+    nombre: 'EVALUACIONES',
+    headers: [
+      'ID_Registro', 'CicloEscolar', 'Mes', 'AlumnoID', 'MaestroID',
+      'Calificacion_Numerica', 'Participacion', 'Autogestion', 'Colaboracion',
+      'Pensamiento_Critico', 'Asistencia_Porcentaje', 'Tareas_Entregadas',
+      'Observaciones', 'Indice_Desempeno', 'Nivel_Riesgo', 'Semaforo',
+      'FechaRegistro'
+    ]
+  },
+  MAESTROS_AUTH: {
+    nombre: 'MAESTROS_AUTH',
+    headers: ['MaestroID', 'PasswordHash', 'Salt', 'Activo', 'UltimoAcceso']
+  },
+  ACCESOS_PADRES: {
+    nombre: 'ACCESOS_PADRES',
+    headers: ['AlumnoID', 'PINHash', 'Salt', 'TutorNombre', 'TutorEmail', 'TutorTelefono', 'Activo', 'FechaAlta']
+  },
+  BACKUP_LOGS: {
+    nombre: 'BACKUP_LOGS',
+    headers: ['Fecha', 'Payload', 'Estado']
+  }
+};
+
+/**
+ * Devuelve el Spreadsheet activo, abriéndolo por fallback si hace falta.
+ */
+function getSS_() {
+  try {
+    return SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+    if (!id) throw new Error('SPREADSHEET_ID no configurado en Script Properties y no hay spreadsheet activo.');
+    return SpreadsheetApp.openById(id);
+  }
+}
+
+/**
+ * Devuelve una hoja por nombre. Si no existe, lanza error legible con sugerencia.
+ */
+function getHoja(nombre) {
+  const ss = getSS_();
+  const sh = ss.getSheetByName(nombre);
+  if (!sh) {
+    throw new Error(
+      'Hoja "' + nombre + '" no encontrada en el spreadsheet. ' +
+      'Verifica que exista con ese nombre exacto (mayúsculas inclusive). ' +
+      'Si tu sistema está recién desplegado, ejecuta diagnosticoSheets() desde el editor.'
+    );
+  }
+  return sh;
+}
+
+/**
+ * Asegura que la hoja exista. Si no existe, la crea con los headers esperados
+ * y devuelve la hoja creada. Útil para MAESTROS_AUTH y BACKUP_LOGS al primer arranque.
+ */
+function asegurarHoja(def) {
+  const ss = getSS_();
+  let sh = ss.getSheetByName(def.nombre);
+  if (sh) return sh;
+  sh = ss.insertSheet(def.nombre);
+  sh.getRange(1, 1, 1, def.headers.length).setValues([def.headers]);
+  sh.setFrozenRows(1);
+  return sh;
+}
+
+/**
+ * Valida que los headers de una hoja coincidan con el esquema.
+ * Devuelve {ok: bool, faltantes: [...], extras: [...]} sin lanzar excepción.
+ */
+function validarHeaders(nombreHoja, headersEsperados) {
+  const sh = getHoja(nombreHoja);
+  const headersReales = sh.getRange(1, 1, 1, headersEsperados.length).getValues()[0];
+  const faltantes = [];
+  const extras = [];
+  headersEsperados.forEach((h, i) => {
+    if (String(headersReales[i] || '').trim() !== h) {
+      faltantes.push({ pos: i + 1, esperado: h, actual: String(headersReales[i] || '').trim() });
+    }
+  });
+  if (headersReales.length > headersEsperados.length) {
+    for (let i = headersEsperados.length; i < headersReales.length; i++) {
+      extras.push(String(headersReales[i] || '').trim());
+    }
+  }
+  return { ok: faltantes.length === 0, faltantes: faltantes, extras: extras };
+}
+
+/**
+ * Lee una hoja completa. Devuelve {headers, filas} donde filas es array de objetos
+ * con claves = headers. Si la hoja está vacía (solo header), devuelve {headers, filas: []}.
+ */
+function leerFilas(nombreHoja) {
+  const sh = getHoja(nombreHoja);
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) {
+    return { headers: data[0] || [], filas: [] };
+  }
+  const headers = data[0].map(h => String(h || '').trim());
+  const filas = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = {};
+    headers.forEach((h, j) => {
+      row[h] = data[i][j];
+    });
+    filas.push(row);
+  }
+  return { headers: headers, filas: filas };
+}
+
+/**
+ * Busca la fila de EVALUACIONES que coincida con alumnoId + mes + cicloEscolar.
+ * Devuelve {row: numero (1-based)} si la encuentra, o null si no existe.
+ */
+function buscarFilaEvaluacion(alumnoId, mes, cicloEscolar) {
+  const sh = getHoja('EVALUACIONES');
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (
+      String(data[i][3] || '').trim() === String(alumnoId).trim() &&
+      String(data[i][2] || '').trim() === String(mes).trim() &&
+      String(data[i][1] || '').trim() === String(cicloEscolar).trim()
+    ) {
+      return i + 1; // +1 porque getRange() es 1-based
+    }
+  }
+  return null;
+}
+
+/**
+ * Inserta o actualiza una evaluación.
+ * Devuelve {fila, accion: "insert"|"update", indice, semaforo, riesgo}.
+ */
+function upsertEvaluacion(evaluacion) {
+  const sh = getHoja('EVALUACIONES');
+  const filaExistente = buscarFilaEvaluacion(evaluacion.alumnoId, evaluacion.mes, evaluacion.cicloEscolar);
+
+  const fila = [
+    filaExistente ? sh.getRange(filaExistente, 1).getValue() : ('EVAL-' + Date.now()),
+    evaluacion.cicloEscolar,
+    evaluacion.mes,
+    evaluacion.alumnoId,
+    evaluacion.maestroId,
+    parseFloat(evaluacion.calificacion),
+    parseInt(evaluacion.participacion, 10),
+    parseInt(evaluacion.autogestion, 10),
+    parseInt(evaluacion.colaboracion, 10),
+    parseInt(evaluacion.pensamiento, 10),
+    parseInt(evaluacion.asistencia, 10),
+    parseInt(evaluacion.tareas, 10),
+    String(evaluacion.observaciones || ''),
+    parseFloat(evaluacion.indice),
+    String(evaluacion.riesgo),
+    String(evaluacion.semaforo),
+    filaExistente ? sh.getRange(filaExistente, 17).getValue() : new Date()
+  ];
+
+  if (filaExistente) {
+    sh.getRange(filaExistente, 1, 1, 17).setValues([fila]);
+    return { fila: filaExistente, accion: 'update', indice: evaluacion.indice, semaforo: evaluacion.semaforo, riesgo: evaluacion.riesgo };
+  } else {
+    sh.appendRow(fila);
+    return { fila: sh.getLastRow(), accion: 'insert', indice: evaluacion.indice, semaforo: evaluacion.semaforo, riesgo: evaluacion.riesgo };
+  }
+}
+
+/**
+ * Lee evaluaciones de un alumno específico (todas las del historial).
+ * Devuelve array de objetos con campos normalizados.
+ */
+function leerHistorialAlumno(alumnoId) {
+  const sh = getHoja('EVALUACIONES');
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) return [];
+
+  const headers = data[0];
+  const idx = {};
+  headers.forEach((h, i) => { idx[String(h).trim()] = i; });
+
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idx['AlumnoID']] || '').trim() !== String(alumnoId).trim()) continue;
+    out.push({
+      idRegistro: data[i][idx['ID_Registro']],
+      cicloEscolar: data[i][idx['CicloEscolar']],
+      mes: data[i][idx['Mes']],
+      alumnoId: data[i][idx['AlumnoID']],
+      maestroId: data[i][idx['MaestroID']],
+      calificacion: data[i][idx['Calificacion_Numerica']],
+      participacion: data[i][idx['Participacion']],
+      autogestion: data[i][idx['Autogestion']],
+      colaboracion: data[i][idx['Colaboracion']],
+      pensamiento: data[i][idx['Pensamiento_Critico']],
+      asistencia: data[i][idx['Asistencia_Porcentaje']],
+      tareas: data[i][idx['Tareas_Entregadas']],
+      observaciones: data[i][idx['Observaciones']],
+      indice: data[i][idx['Indice_Desempeno']],
+      riesgo: data[i][idx['Nivel_Riesgo']],
+      semaforo: data[i][idx['Semaforo']],
+      fechaRegistro: data[i][idx['FechaRegistro']]
+    });
+  }
+  return out;
+}
+
+/**
+ * Lee la configuración y la devuelve como objeto {tipo: [{valorId, descripcion}]}.
+ * Útil para catálogos como Maestros M01-M09.
+ */
+function leerConfig() {
+  const { filas } = leerFilas('CONFIG');
+  const cfg = {};
+  filas.forEach(row => {
+    const tipo = String(row.TIPO || '').trim();
+    if (!cfg[tipo]) cfg[tipo] = [];
+    cfg[tipo].push({
+      valorId: String(row.VALOR_ID || '').trim(),
+      descripcion: String(row.DESCRIPCION || '').trim()
+    });
+  });
+  return cfg;
+}
+
+/**
+ * Devuelve el nombre real de un maestro a partir de su ID,
+ * buscado en CONFIG.TIPO=Maestro.
+ */
+function nombreDeMaestro(maestroId) {
+  const cfg = leerConfig();
+  const lista = cfg['Maestro'] || [];
+  const found = lista.find(m => m.valorId === String(maestroId).trim());
+  return found ? found.descripcion : null;
+}
+
+/**
+ * Devuelve el ciclo escolar vigente desde CONFIG.TIPO=Periodo.
+ * Por simplicidad toma el primero; si hay varios, devuelve el primero.
+ */
+function cicloEscolarVigente() {
+  const cfg = leerConfig();
+  const lista = cfg['Periodo'] || [];
+  return lista.length ? lista[0].valorId : null;
+}
+
+/**
+ * Helper: appendRow a hoja de logs. Si la hoja no existe o está llena de cosas raras,
+ * NO falla la operación principal (los logs son best-effort).
+ */
+function logAppend(nombreHoja, fila) {
+  try {
+    const sh = asegurarHoja(SHEETS[nombreHoja]);
+    sh.appendRow(fila);
+  } catch (e) {
+    // Silencioso. Si el log falla, el backend sigue funcionando.
+    Logger.log('logAppend falló: ' + e.message);
+  }
+}

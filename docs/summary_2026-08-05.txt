@@ -1,0 +1,71 @@
+Resumen de trabajo realizado el 2026-08-05
+========================================
+
+Objetivo principal:
+- Corregir el feedback visual de las evaluaciones individuales (mostrar botón verde "✏️ Editar" inmediatamente después de guardar).
+- Añadir persistencia mediante localStorage para no perder evaluaciones al recargar, perder conexión o cambiar de sesión.
+- Asegurar que la analítica se actualice después de guardar el grupo en Sheets.
+
+Cambios realizados en ui.js (solo este archivo, sin tocar código estructural):
+
+1. renderTabla()
+   - Antes: mostraba estado "capturado" solo si existía captura en el backend.
+   - Ahora: muestra estado "capturado" si existe captura en el backend **o** si la evaluación en el frontend es válida (validarParaEnvio).
+   - Esto permite que, tras guardar un panel individual, el alumno aparezca como completado sin necesidad de guardar todo el grupo.
+
+2. guardarPanelActual()
+   - Después de validar y cerrar el panel, se llama a renderTabla() para actualizar la tabla inmediatamente.
+   - Se actualiza el contador de listos y se muestra toast de éxito.
+
+3. Persistencia con localStorage
+   - Nueva función guardarEvaluacionesLocal(): guarda en localStorage un objeto con maestroId, mes, cicloEscolar y el objeto state.evaluaciones.
+   - Se llama a esta función en:
+     * onCambio (cada cambio de campo)
+     * setCompetencia (cambio de competencia)
+     * toggleVozCampo y toggleVoz (dictado de voz)
+     * listener del textarea de observaciones
+   - En cargarGrupo(), después de obtener datos del backend, se intenta leer localStorage:
+     * Si los datos guardados coinciden con maestroId, mes y cicloEscolar actuales, se fusionan con state.evaluaciones (sobrescribiendo valores locales).
+     * Si no coinciden, se ignoran (evita cargar evaluaciones de otro maestro/mes/ciclo).
+   - Al cerrar sesión (logout) o al iniciar sin sesión válida, se elimina la clave 'wundtEvaluaciones' de localStorage.
+
+4. guardarEvaluaciones()
+   - Se añadió await antes de llamar a cargarGrupo() después de guardar en Sheets, para asegurar que la analítica se recargue con los datos actualizados antes de reactivar la UI.
+   - Después de guardar, se refresca el estado de capturas desde el backend (getEstadoCapturas) para marcar los alumnos como __sincronizado y evitar reenvíos.
+   - Se renderiza la tabla y se actualiza el contador tras el refresh de capturas.
+
+5. renderAnalitica()
+   - Se intenta usar los datos de analitica.porMes[0] si existen.
+   - Si no hay datos de analitica, se calcula el porcentaje de capturados considerando:
+        * capturas del backend (state.capturas[alumnoId].capturado)
+        * evaluaciones válidas del frontend (validarParaEnvio(state.evaluaciones[alumnoId]))
+   - Se corrigió una variable llamada `eval` que chocaba con la función global eval(); se renombró a `ev` en el bloque de respaldo.
+   - Se añadieron console.debug para trazabilidad (pueden eliminarse en producción).
+   - Se actualizan los KPIs: porcentaje, capturados/detalle, índice (si disponible), y se muestran gráficos de Chart.js (doughnut y línea).
+
+6. toast()
+   - Se arregló la sintaxis de setTimeout que estaba incompleta y causaba Uncaught SyntaxError, bloqueando toda la ejecución de JavaScript.
+   - Nueva línea correcta:
+        setTimeout(() => {
+          t.classList.remove('show');
+          setTimeout(() => t.remove(), 300);
+        }, duracion);
+
+7. Eliminación de duplicados
+   - Se encontró y eliminó una segunda definición anterior de la función guardarEvaluacionesLocal que causaba "Identifier 'guardarEvaluacionesLocal' has already been declared".
+
+Resultado esperado:
+- Al iniciar sesión y cargar un grupo, se muestran los alumnos con su estado correcto (pendiente o capturado).
+- Al capturar un alumno individualmente y guardar su panel, inmediatamente aparece el botón verde "✏️ Editar" en la tabla.
+- Las evaluaciones individuales se persisten en localStorage; al recargar la página o recuperar la conexión, se restauran siempre que coincida maestro/mes/ciclo.
+- Al guardar el grupo completo (Guardar Evaluación Grupal), se envían a Sheets, se actualizan las capturas en el backend y se recarga la analítica mostrando los nuevos porcentajes y gráficos.
+- No aparecen errores de sintaxis en la consola; la aplicación carga y permite iniciar sesión.
+
+Próximos pasos (para mañana):
+- Verificar en entorno de prueba que la persistencia funciona al cambiar de mes o de maestro (debe ignorar localStorage no coincidente).
+- Confirmar que los gráficos de analítica se actualizan correctamente después de guardar el grupo.
+- Revisar que los KPIs de "En desarrollo" y "Necesitan apoyo" sigan mostrando 0 (porque el backend no desglosa por semáforo actualmente) o bien implementar un cálculo basado en evaluaciones si se requiere.
+- Eliminar los console.debug de renderAnalitica si se considera que ya no son necesarios.
+- Realizar pruebas de rendimiento con muchos alumnos para asegurar que el filtrado y renderizado siguen siendo fluidos.
+
+Archivo creado para documentación de contexto de arranque mañana.

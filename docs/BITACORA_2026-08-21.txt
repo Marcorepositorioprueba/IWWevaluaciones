@@ -1,0 +1,215 @@
+================================================================================
+WILHELM WUNDT v2 — BITÁCORA DE IMPLEMENTACIÓN 2026-08-21
+================================================================================
+
+Trabajo de hoy: 5 fixes pequeños sobre la base de ayer + 1 bug grave descubierto.
+Sin cambios estructurales. Todo es defensivo o frontend puro.
+
+  1) BANNER INFORMATIVO DE MES DE CAPTURA
+     - Banner azul en docente/index.html que muestra el mes actual del sistema
+       y sugiere "captura máxima al finalizar el mes".
+     - El campo Mes del dropdown sigue siendo automático pero seleccionable.
+     - Sin cambios en backend.
+
+  2) VALIDACIÓN DE MES NO FUTURO
+     - En frontend (ui.js): validarMesNoFuturo_() bloquea seleccionar meses
+       posteriores al actual del ciclo escolar (Ago-Jul).
+     - En backend (lib_validaciones.gs): mesActualCicloEscolar_() + check en
+       validarSaveEvaluacionesTop(). Red de seguridad por si el frontend lo evade.
+
+  3) FIX CRÍTICO: CicloEscolar como Date
+     - El Sheet convertía la columna B (CicloEscolar) a tipo Date al insertar
+       filas, rompiendo la búsqueda. Ej: "2026-07" quedaba como Date
+       "Wed Jul 01 2026 00:00:00..." y nunca matcheaba con el string.
+     - Sintoma: capturar alumno, cerrar sesión, reabrir → alumno aparecía
+       como no capturado, se creaban duplicados.
+     - Fix: normalizarCicloEscolar_() aplicado en 5 lugares de lib_sheets.gs:
+       buscarFilaEvaluacion, upsertEvaluacion (escritura), leerCapturasMaestro_,
+       leerCobertura_, leerAnaliticaMaestro_.
+
+  4) FIX CRÍTICO: Colisión IDs 3.1 vs 3.10
+     - Sheet lee IDs numéricos como number: "3.1" y "3.10" ambos se leen
+       como 3.1 (number). Esto hacía que al buscar 3.10, matcheara con la
+       fila del 3.1 real, sobrescribiendo datos.
+     - Solución en 2 capas:
+       a) canonicalizarAlumnoId_() — padding de ceros para comparar formas
+          únicas: "3.1" → "03.01", "3.10" → "03.10". Aplicado en
+          buscarFilaEvaluacion. Garantiza que la búsqueda distinga.
+       b) forzarTextoId_() + limpiarTextoId_() — al ESCRIBIR agrega apóstrofo
+          "'" antes del ID (Sheet lo guarda como texto literal); al LEER lo
+          quita. Aplicado en upsertEvaluacion + 3 lecturas (leerCapturasMaestro_,
+          leerCobertura_, leerAnaliticaMaestro_). Garantiza que Sheet distinga
+          "3.1" de "3.10" en futuras inserciones.
+
+  5) FIX ANALÍTICA: KPIs de semáforo en modo numérico
+     - renderAnalitica() hardcodeaba kpiAmarillo='0' y kpiRojo='0'. Ahora
+       lee analiticaData.semaforoCounts.{Amarillo,Rojo} del backend.
+     - También: el chart doughnut ahora muestra 4 segmentos (Verde / Amarillo /
+       Rojo / Pendiente) en lugar de solo Capturado vs Pendiente.
+     - También: elegir el porMes del mes/ciclo actual (no porMes[0]) para que
+       cambiar de mes actualice los KPIs.
+
+================================================================================
+ARCHIVOS MODIFICADOS (con sufijo _PEGAR.gs cuando aplica)
+================================================================================
+
+backend/
+  lib_sheets.gs
+    + normalizarCicloEscolar_(v)             — Date → "YYYY-MM"
+    + canonicalizarAlumnoId_(id)             — "3.1" → "03.01", "3.10" → "03.10"
+    + forzarTextoId_(id)                     — "'3.10" para forzar texto en Sheet
+    + limpiarTextoId_(id)                    — quita "'" al leer
+    ~ buscarFilaEvaluacion                    — usa canonicalizar + limpiarTexto
+    ~ upsertEvaluacion (columna D)            — escribe con forzarTextoId_
+    ~ leerCapturasMaestro_ (línea ~500)      — limpia apóstrofo al leer
+    ~ leerCobertura_ (línea ~588)            — limpia apóstrofo al leer
+    ~ leerAnaliticaMaestro_ (línea ~727)      — limpia apóstrofo al leer
+
+  lib_sheets_PEGAR.gs                        — MISMO contenido que lib_sheets.gs
+                                              actualizado. Para pegar en Apps Script.
+
+  lib_validaciones.gs
+    + mesActualCicloEscolar_()                — devuelve índice 0-11 del mes
+                                                actual en el ciclo (Ago-Jul)
+    ~ validarSaveEvaluacionesTop             — bloquea meses futuros del ciclo
+
+  lib_validaciones_PEGAR.gs                  — MISMO contenido actualizado.
+
+  diagnostico.gs
+    + diagnosticoCapturasM03()                — detecta si columna B es Date
+    + verificarFixCanonicalizar()            — confirma que Apps Script tiene
+                                                cargado canonicalizarAlumnoId_
+    + diagnosticoColisionIDs()                — busca duplicados por idCanon
+    + limpiarDuplicadosEvaluaciones()         — elimina filas duplicadas,
+                                                conserva la más antigua
+    + simularBusquedaFila(alumnoId,mes,ce)    — simula búsqueda para depurar
+    + simularBusqueda310()                    — variante hardcoded para 3.10
+
+frontend/docente/
+  index.html
+    + Banner HTML (líneas 136-150)
+    ~ ?v=11 + WUNDT_VERSION='4.6'
+
+  assets/js/ui.js
+    + indiceMesCiclo importado desde modelos.js
+    + validarMesNoFuturo_(mes)                — bloquea meses futuros del ciclo
+    + mostrarBannerMesCaptura_(mes)           — pinta el banner azul
+    ~ cargarGrupo                             — llama validarMesNoFuturo_
+    ~ solicitarGuardar                        — llama validarMesNoFuturo_
+    ~ renderAnalitica (numérico)              — KPIs semáforo desde backend,
+                                                doughnut 4-segmentos,
+                                                elige porMes por mes/ciclo actual
+
+================================================================================
+DIAGNÓSTICOS CONFIRMADOS HOY (logs reales)
+================================================================================
+
+1. diagnosticoCapturasM03() ANTES del fix de Date:
+   ⚠ Tipo Date: 1 ⚠️ PROBLEMA
+   ✓ Comparado normalizado con "2026-07": ✓ MATCH   ← fix funcionaba
+
+2. verificarFixCanonicalizar() resultados:
+   ✓ canonicalizar("3.1")  = "03.01" ✓
+   ✓ canonicalizar("3.10") = "03.10" ✓
+   ✓ canonicalizar("3.1") ≠ canonicalizar("3.10")  ← ya no colisionan
+
+3. diagnosticoColisionIDs() tras limpieza:
+   ✓ No se detectaron colisiones por idCanon
+   === Total colisiones: 0 ===
+   === IDs únicos totales: 14 ===
+
+================================================================================
+ESTADO ACTUAL DEL SHEET (EVALUACIONES, M03/Agosto)
+================================================================================
+
+Fila | idCanon | Alumno
+-----|---------|--------
+ 33  | 03.01   | 3.1
+ 34  | 03.02   | 3.2
+ 35  | 03.03   | 3.3
+ 36  | 03.04   | 3.4
+ 37  | 03.05   | 3.5
+ 38  | 03.06   | 3.6
+ 39  | 03.07   | 3.7
+ 40  | 03.08   | 3.8
+ 41  | 03.09   | 3.9
+ ---  | 03.10   | 3.10  ← PENDIENTE capturar mañana
+ 43  | 03.11   | 3.11
+ 44  | 03.12   | 3.12
+ 45  | 03.13   | 3.13
+ 46  | 03.14   | 3.14
+ 47  | 03.15   | 3.15
+
+================================================================================
+PENDIENTE PARA MAÑANA 2026-08-22
+================================================================================
+
+PRIORIDAD 1 — Probar fix de texto literal con varios pares problemáticos:
+  [ ] Capturar 3.10 desde el portal (ya tení deployado el fix de texto literal)
+  [ ] Capturar 3.2 (que colisiona con 3.20 si existiera)
+  [ ] Ejecutar diagnosticoColisionIDs() y confirmar 0 colisiones
+  [ ] Re-capturar 3.10 (debe sobrescribir misma fila, no crear nueva)
+
+PRIORIDAD 2 — Validar analítica completa:
+  [ ] Capturar todos los alumnos M03 restantes (15 alumnos)
+  [ ] Verificar KPIs semáforo: Verde, Amarillo, Rojo correctos
+  [ ] Verificar doughnut chart con 4 segmentos
+  [ ] Probar navegación entre meses (debe mostrar datos del mes seleccionado)
+
+PRIORIDAD 3 — Conversión manual de columna D de EVALUACIONES:
+  [ ] Abrir EVALUACIONES en Sheet
+  [ ] Seleccionar columna D completa (AlumnoID)
+  [ ] Formato → Número → Texto sin formato (para que filas existentes
+    que están como number pasen a texto)
+  NOTA: las filas 33-47 actuales (que quedaron como number de pruebas
+  previas) seguirán mostrándose como "3.1" pero el sistema las trata
+  como 03.01 por la canonicalización. Conviene limpiarlas y re-capturar
+  en producción limpia.
+
+PRIORIDAD 4 — Validación portal padres con alumnos 3.10, 3.11 etc.:
+  [ ] Si un padre entra con PIN de 3.10, debe ver SU evaluación (no la de 3.1)
+  [ ] Si un padre entra con PIN de 3.11, debe ver SU evaluación
+  [ ] Esto valida que leerHistorialAlumno aplica limpiarTextoId_
+
+================================================================================
+FRASE RÁPIDA PARA MAÑANA (literal, para que la pegues al inicio)
+================================================================================
+
+"Retomar Wilhelm Wundt. Hoy 2026-08-21 se hicieron 5 fixes: banner mes
+captura, validación mes no futuro, fix CicloEscolar Date (normalizarCicloEscolar_),
+fix colisión IDs 3.1 vs 3.10 (canonicalizarAlumnoId_ + forzarTextoId_ + limpiarTextoId_),
+fix KPIs semáforo analítica. Todo desplegado. Pendiente mañana: probar fix
+de texto literal con pares problemáticos (3.10, 3.2 etc), capturar todos los
+M03 restantes, validar analítica completa, convertir columna D de EVALUACIONES
+a texto plano. Bitácora completa en docs/BITACORA_2026-08-21.txt.
+Memoria clave: wundt-migracion-2026-08-20.md, seguimiento-academico-wundt.md."
+
+================================================================================
+ARCHIVOS DE MEMORIA RELEVANTES PARA MAÑANA
+================================================================================
+
+- seguimiento-academico-wundt.md     — estado general del proyecto Wundt
+- wundt-migracion-2026-08-20.md      — migración 3+10 desplegada ayer
+- BITACORA_2026-08-20.txt            — bitácora de ayer
+- BITACORA_2026-08-21.txt            — esta bitácora
+
+================================================================================
+CONTEXTO RÁPIDO PARA RECORDAR
+================================================================================
+
+- Proyecto: C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2
+- API_URL: https://script.google.com/macros/s/AKfycbwdVP-UxhfGYraVDetQZPN-XRnCEjQ35c-OZn3cztt12heMul2nLnNxPZX0TQDM0Q/exec
+- Tipo: Google Apps Script + HTML/JS frontend (Tailwind CDN + Chart.js CDN)
+- BD: Google Sheets (6 hojas: CONFIG, ALUMNOS, EVALUACIONES, MAESTROS_AUTH,
+  ACCESOS_PADRES, BACKUP_LOGS)
+- AUTH: HMAC + salt, sesión 12h, en sessionStorage['wundt_docente_sesion_v2']
+- Maestros preescolar: M10/M11/M12 (cualitativos) y M01-M09 (numéricos)
+- 135 alumnos reales, 12 grados: 3 preescolar (cualitativos) + 9 numéricos
+- ESM modules en frontend (import/export)
+- Cache-bust: ?v=N + WUNDT_VERSION='X.Y' en index.html
+- Para deploy: Sustituir archivos .gs con _PEGAR.gs en Apps Script,
+  luego Deploy → Manage deployments → New version
+
+================================================================================
+FIN BITÁCORA 2026-08-21
+================================================================================

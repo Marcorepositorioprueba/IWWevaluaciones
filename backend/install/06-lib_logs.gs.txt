@@ -1,0 +1,38 @@
+// lib_logs.gs — Helpers para auditoría en BACKUP_LOGS.
+//
+// Cada POST/GET queda registrado. Si la hoja no existe, se crea.
+// Si el log falla, la operación principal sigue funcionando (best-effort).
+
+/**
+ * Trunca un payload a 500 chars para no explotar la hoja de logs.
+ */
+function truncar_(s, maxLen) {
+  s = String(s == null ? '' : s);
+  return s.length > (maxLen || 500) ? s.substring(0, maxLen) + '...[truncado]' : s;
+}
+
+/**
+ * Registra un POST/GET con su payload y estado.
+ */
+function registrarOperacion(payload, estado) {
+  try {
+    const sh = asegurarHoja(SHEETS.BACKUP_LOGS);
+    sh.appendRow([new Date(), truncar_(payload, 500), String(estado)]);
+  } catch (e) {
+    Logger.log('registrarOperacion falló: ' + e.message);
+  }
+}
+
+/**
+ * Loguea un error con stack.
+ */
+function registrarError(payload, error) {
+  try {
+    const sh = asegurarHoja(SHEETS.BACKUP_LOGS);
+    const msg = 'ERROR: ' + (error && error.message ? error.message : String(error)) +
+                (error && error.stack ? ' | stack: ' + error.stack.substring(0, 200) : '');
+    sh.appendRow([new Date(), truncar_(payload, 500), msg]);
+  } catch (e) {
+    Logger.log('registrarError falló: ' + e.message);
+  }
+}

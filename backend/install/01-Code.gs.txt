@@ -1,0 +1,297 @@
+// Code.gs — Router principal del backend Wilhelm Wundt v2.
+//
+// Punto de entrada:
+//   doGet(e)  → health check y diagnóstico protegido
+//   doPost(e) → router por action (5 acciones)
+//
+// Cada request logea a BACKUP_LOGS. Errores se devuelven con {ok:false, error}.
+//
+// CORS: Apps Script sirve con ContentService. Para que el frontend en otro
+// dominio pueda llamar sin preflight, el frontend envía Content-Type:
+// text/plain;charset=utf-8. Apps Script responde con JSON sin headers CORS
+// restrictivos (es público en Web App).
+
+// =========================================
+// GET — health check y diagnóstico
+// =========================================
+
+function doGet(e) {
+  const accion = (e && e.parameter && e.parameter.accion) || 'health';
+  try {
+    if (accion === 'health') {
+      return json_({ status: 'ok', version: '2.0', servidor: 'wundt' });
+    }
+
+    if (accion === 'diagnostico') {
+      const tokenRecibido = String((e && e.parameter && e.parameter.adminToken) || '');
+      const tokenEsperado = PropertiesService.getScriptProperties().getProperty('WUNDT_ADMIN_TOKEN');
+      if (!tokenEsperado) return json_({ ok: false, error: 'WUNDT_ADMIN_TOKEN no configurado' }, 500);
+      if (tokenRecibido !== tokenEsperado) return json_({ ok: false, error: 'Admin token inválido' }, 401);
+
+      const hojas = {};
+      Object.keys(SHEETS).forEach(key => {
+        const def = SHEETS[key];
+        try {
+          const sh = getSS_().getSheetByName(def.nombre);
+          if (!sh) {
+            hojas[key] = { existe: false, filas: 0, headersOk: false };
+          } else {
+            const filas = Math.max(0, sh.getLastRow() - 1);
+            const headersOk = validarHeaders(def.nombre, def.headers).ok;
+            hojas[key] = { existe: true, filas: filas, headersOk: headersOk };
+          }
+        } catch (err) {
+          hojas[key] = { existe: false, error: err.message };
+        }
+      });
+      return json_({ ok: true, hojas: hojas });
+    }
+
+    return json_({ ok: false, error: 'Acción GET desconocida: ' + accion }, 400);
+  } catch (err) {
+    registrarError('GET ' + accion, err);
+    return json_({ ok: false, error: err.message }, 500);
+  }
+}
+
+// =========================================
+// POST — router de acciones
+// =========================================
+
+function doPost(e) {
+  let body = {};
+  let rawPayload = '';
+  try {
+    // El frontend envía text/plain, así que e.postData.contents viene como string JSON.
+    rawPayload = (e && e.postData && e.postData.contents) || '{}';
+    body = JSON.parse(rawPayload);
+  } catch (parseErr) {
+    registrarError('POST (parse)', parseErr);
+    return json_({ ok: false, error: 'JSON inválido en el body' }, 400);
+  }
+
+  const accion = String(body.action || '').trim();
+
+  try {
+    let resp;
+    switch (accion) {
+      case 'auth_maestro':       resp = accionAuthMaestro_(body); break;
+      case 'auth_padre':         resp = accionAuthPadre_(body); break;
+      case 'get_alumnos':        resp = accionGetAlumnos_(body); break;
+      case 'save_evaluaciones':  resp = accionSaveEvaluaciones_(body); break;
+      case 'get_historial_padre':resp = accionGetHistorialPadre_(body); break;
+      default:
+        return json_({ ok: false, error: 'Acción POST desconocida: ' + (accion || '(vacía)') }, 400);
+    }
+    registrarOperacion(rawPayload, 'OK ' + accion);
+    return json_(resp);
+  } catch (err) {
+    registrarError(rawPayload + ' | accion=' + accion, err);
+    return json_({ ok: false, error: err.message, errorCode: 'SHEETS_ERROR' }, 500);
+  }
+}
+
+// =========================================
+// Acciones individuales
+// =========================================
+
+function accionAuthMaestro_(body) {
+  const v = validarAuthMaestro(body);
+  if (!v.ok) return { ok: false, error: v.errores.map(e => e.campo + ': ' + e.msg).join('; '), errorCode: 'VALIDACION' };
+
+  // Verifica que el maestro exista en CONFIG
+  const nombreConfig = nombreDeMaestro(v.datos.maestroId);
+  if (!nombreConfig) return { ok: false, error: 'Maestro no encontrado', errorCode: 'AUTH_FAILED' };
+
+  // Verifica credenciales
+  const filas = leerFilas('MAESTROS_AUTH').filas;
+  const registro = filas.find(r => String(r.MaestroID || '').trim() === v.datos.maestroId);
+  if (!registro) return { ok: false, error: 'Maestro sin credenciales. Ejecuta crearMaestrosAuth() en el editor.', errorCode: 'AUTH_FAILED' };
+  if (registro.Activo === false || registro.Activo === 'FALSE' || registro.Activo === 'false') {
+    return { ok: false, error: 'Cuenta desactivada', errorCode: 'AUTH_DISABLED' };
+  }
+  const ok = verificarHash(v.datos.password, String(registro.Salt || ''), String(registro.PasswordHash || ''));
+  if (!ok) return { ok: false, error: 'Credenciales inválidas', errorCode: 'AUTH_FAILED' };
+
+  // Actualiza último acceso
+  const sh = getHoja('MAESTROS_AUTH');
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0] || '').trim() === v.datos.maestroId) {
+      sh.getRange(i + 1, 5).setValue(new Date());
+      break;
+    }
+  }
+
+  // Genera sesión
+  const ses = generarSesion('M:' + v.datos.maestroId);
+  return {
+    ok: true,
+    maestroId: v.datos.maestroId,
+    nombre: nombreConfig,
+    sesionToken: ses.token,
+    expiraEn: ses.expiraEn
+  };
+}
+
+function accionAuthPadre_(body) {
+  const v = validarAuthPadre(body);
+  if (!v.ok) return { ok: false, error: v.errores.map(e => e.campo + ': ' + e.msg).join('; '), errorCode: 'VALIDACION' };
+
+  // Verifica que el alumno exista
+  const alumnos = leerFilas('ALUMNOS').filas;
+  const alumno = alumnos.find(a => String(a.AlumnoID || '').trim() === v.datos.alumnoId);
+  if (!alumno) return { ok: false, error: 'Alumno no encontrado', errorCode: 'AUTH_FAILED' };
+
+  // Busca acceso activo
+  const accesos = leerFilas('ACCESOS_PADRES').filas;
+  const accesosAlumno = accesos.filter(r => String(r.AlumnoID || '').trim() === v.datos.alumnoId);
+  const activo = accesosAlumno.find(r => r.Activo === true || r.Activo === 'TRUE' || r.Activo === 'true');
+  if (!activo) return { ok: false, error: 'PIN incorrecto', errorCode: 'AUTH_FAILED' };
+
+  // Verifica PIN
+  const ok = verificarHash(v.datos.pin, String(activo.Salt || ''), String(activo.PINHash || ''));
+  if (!ok) return { ok: false, error: 'PIN incorrecto', errorCode: 'AUTH_FAILED' };
+
+  const ses = generarSesion('P:' + v.datos.alumnoId);
+  return {
+    ok: true,
+    alumnoId: v.datos.alumnoId,
+    nombreAlumno: String(alumno.NombreCompleto || '').trim(),
+    sesionToken: ses.token,
+    expiraEn: ses.expiraEn
+  };
+}
+
+function accionGetAlumnos_(body) {
+  const v = validarGetAlumnos(body);
+  if (!v.ok) return { ok: false, error: v.errores.map(e => e.campo + ': ' + e.msg).join('; '), errorCode: 'VALIDACION' };
+
+  const sesion = validarSesion(v.datos.sesionToken, 'M:' + v.datos.maestroId);
+  if (!sesion.ok) return { ok: false, error: sesion.razon, errorCode: 'SESION_INVALIDA' };
+
+  const alumnos = leerFilas('ALUMNOS').filas;
+  const filtrados = alumnos
+    .filter(a => String(a.MaestroID || '').trim() === v.datos.maestroId)
+    .filter(a => String(a.NombreCompleto || '').trim() !== 'Por definir')
+    .map(a => ({
+      alumnoId: String(a.AlumnoID || '').trim(),
+      nombre: String(a.NombreCompleto || '').trim(),
+      grupo: String(a.Grupo || '').trim(),
+      grado: String(a.Grado || '').trim()
+    }));
+
+  return { ok: true, alumnos: filtrados };
+}
+
+function accionSaveEvaluaciones_(body) {
+  const v = validarSaveEvaluacionesTop(body);
+  if (!v.ok) return { ok: false, error: v.errores.map(e => e.campo + ': ' + e.msg).join('; '), errorCode: 'VALIDACION' };
+
+  // Para validar la sesión, primero extraemos el subject del token
+  const sesionSinSubject = validarSesion(v.datos.sesionToken);
+  if (!sesionSinSubject.ok) return { ok: false, error: sesionSinSubject.razon, errorCode: 'SESION_INVALIDA' };
+
+  // subject tiene forma M:<id>. Si el body trae maestroId, debe coincidir.
+  if (v.datos.maestroId && sesionSinSubject.subject !== 'M:' + v.datos.maestroId) {
+    return { ok: false, error: 'Sesión no corresponde al maestro', errorCode: 'ACCESO_DENEGADO' };
+  }
+
+  const maestroId = sesionSinSubject.subject.replace(/^M:/, '');
+  const alumnos = leerFilas('ALUMNOS').filas;
+  const alumnoIdsMaestro = new Set(
+    alumnos.filter(a => String(a.MaestroID || '').trim() === maestroId).map(a => String(a.AlumnoID || '').trim())
+  );
+
+  const registros = [];
+  const errores = [];
+
+  v.datos.evaluaciones.forEach(evRaw => {
+    // 1) Verifica que el alumno pertenece a este maestro
+    const aid = String(evRaw.alumnoId || '').trim();
+    if (!alumnoIdsMaestro.has(aid)) {
+      errores.push({ alumnoId: aid, campo: 'alumnoId', msg: 'Alumno no pertenece a este maestro' });
+      return;
+    }
+    // 2) Valida y normaliza
+    const val = validarEvaluacion(evRaw, aid, maestroId, v.datos.cicloEscolar, v.datos.mes);
+    if (!val.ok) {
+      errores.push({ alumnoId: aid, errores: val.errores });
+      return;
+    }
+    // 3) Calcula índice
+    const calc = calcularIndice(val.datos);
+    const evCompleta = Object.assign({}, val.datos, {
+      indice: calc.indice,
+      semaforo: calc.semaforo,
+      riesgo: calc.riesgo
+    });
+    // 4) Upsert
+    try {
+      const ups = upsertEvaluacion(evCompleta);
+      registros.push({
+        alumnoId: aid,
+        idRegistro: 'fila ' + ups.fila,
+        accion: ups.accion,
+        indice: calc.indice,
+        semaforo: calc.semaforo,
+        riesgo: calc.riesgo
+      });
+    } catch (e) {
+      errores.push({ alumnoId: aid, msg: e.message });
+    }
+  });
+
+  return {
+    ok: true,
+    registros: registros,
+    errores: errores,
+    resumen: {
+      total: v.datos.evaluaciones.length,
+      exitosos: registros.length,
+      fallidos: errores.length
+    }
+  };
+}
+
+function accionGetHistorialPadre_(body) {
+  const v = validarGetHistorialPadre(body);
+  if (!v.ok) return { ok: false, error: v.errores.map(e => e.campo + ': ' + e.msg).join('; '), errorCode: 'VALIDACION' };
+
+  const sesion = validarSesion(v.datos.sesionToken, 'P:' + v.datos.alumnoId);
+  if (!sesion.ok) return { ok: false, error: sesion.razon, errorCode: 'SESION_INVALIDA' };
+
+  const alumnos = leerFilas('ALUMNOS').filas;
+  const alumno = alumnos.find(a => String(a.AlumnoID || '').trim() === v.datos.alumnoId);
+  if (!alumno) return { ok: false, error: 'Alumno no encontrado', errorCode: 'NOT_FOUND' };
+
+  const maestroNombre = nombreDeMaestro(String(alumno.MaestroID || '').trim()) || '';
+  const historial = leerHistorialAlumno(v.datos.alumnoId);
+
+  // Ordena por ciclo y mes (más reciente primero)
+  historial.sort((a, b) => {
+    if (a.cicloEscolar !== b.cicloEscolar) return String(b.cicloEscolar).localeCompare(String(a.cicloEscolar));
+    return MESES_VALIDOS.indexOf(b.mes) - MESES_VALIDOS.indexOf(a.mes);
+  });
+
+  return {
+    ok: true,
+    alumno: {
+      alumnoId: v.datos.alumnoId,
+      nombre: String(alumno.NombreCompleto || '').trim(),
+      grado: String(alumno.Grado || '').trim(),
+      maestroNombre: maestroNombre
+    },
+    historial: historial
+  };
+}
+
+// =========================================
+// Helpers de respuesta
+// =========================================
+
+function json_(obj, statusCode) {
+  const out = ContentService.createTextOutput(JSON.stringify(obj));
+  out.setMimeType(ContentService.MimeType.JSON);
+  return out;
+}

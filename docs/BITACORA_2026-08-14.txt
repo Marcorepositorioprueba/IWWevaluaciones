@@ -1,0 +1,187 @@
+================================================================================
+WILHELM WUNDT v2 — BITÁCORA DE IMPLEMENTACIÓN 2026-08-14
+================================================================================
+
+Trabajo de hoy: dos cambios en una sola intervención
+  1) PREESCOLAR: 3 grupos nuevos (cualitativo, sin Índice)
+  2) FORMATIVOS: 3 campos extra (Lenguajes, Ed. Física, Computación)
+     para 1°-6° primaria y 1°-3° secundaria (independientes del Índice)
+
+================================================================================
+PUNTO DE RESTAURACIÓN (si algo se rompe)
+================================================================================
+
+Snapshot completo de la carpeta ANTES de cualquier cambio:
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreCambios_2026-08-14
+
+Para restaurar TODO el proyecto desde cero:
+  1. Borrar la carpeta actual:     WilhelmWundtv2_backup_PreFase2
+  2. Renombrar el snapshot:        WilhelmWundtv2_backup_PreCambios_2026-08-14
+                                   → WilhelmWundtv2_backup_PreFase2
+  3. Limpiar localStorage del navegador (F12 → Application → Local Storage → Clear)
+  4. Volver a pegar los 7 .gs en Apps Script y desplegar como nueva versión
+
+Para restaurar UN archivo individual:
+  Copiar desde la carpeta snapshot el archivo que necesites, sobreescribir
+  en WilhelmWundtv2_backup_PreFase2\<ruta original>.
+
+================================================================================
+ORDEN DE IMPLEMENTACIÓN (dos pausas)
+================================================================================
+
+PAUSA 1 — BACKEND (deployas en Apps Script y verificas que no se rompió nada)
+  [ ] 1. backend/lib_sheets.gs    — Headers EVALUACIONES (23 cols) + helper
+  [ ] 2. backend/lib_validaciones.gs — Bifurcar + 3 formativos opcionales
+  [ ] 3. backend/lib_calculos.gs   — Cortocircuito cualitativo + semaforoDeNivel_
+  [ ] 4. backend/Code.gs           — Pasar alumno completo + semaforo cualitativo
+  [ ] 5. backend/lib_auth.gs       — Seed M10/M11/M12
+
+  Verificación pausa 1:
+    - Cargar localhost:8080/docente/ con M03/wundtM03
+    - Captura normal, debe seguir funcionando (Indice, semaforo, etc.)
+    - Apps Script → Ejecutar diagnosticoSheets() — todo verde
+
+PAUSA 2 — FRONTEND (recargar navegador con Ctrl+Shift+R)
+  [ ] 6. frontend/docente/assets/js/modelos.js — GRADOS_CUALITATIVOS + helpers
+  [ ] 7. frontend/docente/assets/js/ui.js      — Modal bifurcado + formativos
+  [ ] 8. frontend/padres/assets/js/ui.js       — renderCard bifurcado
+  [ ] 9. frontend/padres/assets/js/narrativa.js — Generador bifurcado
+
+  Verificación pausa 2: ver "VERIFICATION" del plan.
+
+DESPUÉS DE LAS DOS PAUSAS (en Sheets/Apps Script — manual):
+  [ ] 10. Sheets CONFIG: 3 filas nuevas (Maestro M10/M11/M12)
+  [ ] 11. Sheets ALUMNOS: 45 filas预留 (P1.1...P3.15 con NombreCompleto="Por definir")
+  [ ] 12. Sheets EVALUACIONES header: extender a 23 columnas (R-W)
+  [ ] 13. Apps Script → seedMaestrosCompleto(false) — crea M10/M11/M12
+  [ ] 14. Apps Script → seedPINsPadres(false) — PINs para los 45 nuevos预留
+  [ ] 15. Deploy frontend: incrementar ?v=4 en index.html
+
+================================================================================
+ARCHIVOS MODIFICADOS HOY
+================================================================================
+
+Pausa 1 (backend) — COMPLETADO:
+  [x] backend/lib_sheets.gs
+        - SHEETS.EVALUACIONES.headers extendido a 23 columnas
+        - upsertEvaluacion escribe las 6 columnas nuevas (R-W) con parseFloat/string
+        - upsertEvaluacion usa setValues 1x23 (era 1x17)
+        - leerHistorialAlumno incluye lenCalif/edFisCalif/compCalif/lenObs/edFisObs/compObs
+        - leerCapturasMaestro_ incluye los 6 campos
+        - Helper nuevo: esCualitativo_(alumno) — match por grado (preescolar/maternal/kinder)
+  [x] backend/lib_validaciones.gs
+        - validarEvaluacion bifurca: cualitativo (solo desempeno+obs) vs numérico (igual)
+        - 3 formativos opcionales (lenCalif/edFisCalif/compCalif 0-10, lenObs/edFisObs/compObs string)
+        - Si preescolar: desempeno se guarda en columna Pensamiento_Critico (reuso)
+        - Compatibilidad: si se llama con string en lugar de objeto alumno, modo=numérico
+  [x] backend/lib_calculos.gs
+        - Nueva funcion semaforoDeNivel_(nivel): 1/2→Rojo, 3→Amarillo, 4→Verde
+        - Etiqueta del nivel 4 cambiada de "Desempeño excepcional" → "Desempeño sobresaliente"
+        - calcularIndice SIN CAMBIOS (el cortocircuito está en Code.gs)
+  [x] backend/Code.gs
+        - accionSaveEvaluaciones_ ahora pasa objeto alumno completo a validarEvaluacion
+        - Detecta cualitativo y setea indice=0 + semaforo=semaforoDeNivel_ directamente
+  [x] backend/lib_auth.gs
+        - seedMaestrosCompleto incluye M10/M11/M12 con passwords wundtM10/11/12
+
+Pausa 2 (frontend) — COMPLETADO:
+  [x] frontend/docente/assets/js/modelos.js
+        - GRADOS_CUALITATIVOS + esCualitativo() exportada
+        - evaluacionVacia(cualitativo), validarParaEnvio(ev, cualitativo) parametrizados
+        - hidratarDesdeCapturas bifurca (cual vs num)
+        - clasificarCapturas bifurca + incluye formativos en comparación numérica
+        - contarListos usa esCualitativo por alumno
+  [x] frontend/docente/assets/js/ui.js
+        - renderTabla muestra nivel 1-4 (no índice) si cualitativo
+        - abrirPanel bifurca: modal cualitativo (4 botones grandes + textarea)
+          vs modal numérico (7 campos originales + bloque "Otros formativos")
+        - guardarEvaluaciones bifurca payload (cual: desempeno+obs; num: + 6 formativos)
+        - Nuevas funciones: setDesempeno, onCambioCual, onCambioFormativo
+        - wireCualitativoListeners / wireNumericoListeners separados
+        - renderModalCualitativo / renderModalNumerico / renderBloqueFormativos
+        - etiquetaComp 4 → "Desempeño sobresaliente"
+        - validarParaEnvio siempre recibe cualitativo
+  [x] frontend/padres/assets/js/ui.js
+        - renderCard bifurcado en renderCardCualitativa vs renderCardNumerica
+        - esCualitativoAlumno_ helper (mismo patrón que backend)
+        - renderBloqueFormativosPadres: 3 sub-tarjetas con calif+obs (solo si hay datos)
+        - evFull ahora incluye grado para que narrativa pueda bifurcar
+  [x] frontend/padres/assets/js/narrativa.js
+        - ETIQUETAS_COMPETENCIA[4] = "muestra desempeño sobresaliente"
+        - Nuevas constantes ETIQUETAS_NIVEL, GRADOS_CUALITATIVOS
+        - esCualitativo(ev) helper (matchea por ev.grado)
+        - generarNarrativa bifurca a generarNarrativaCualitativa vs Numerica
+        - generarParrafoFormativos agrega bloque al narrar (solo si hay calif)
+
+DOCUMENTACIÓN:
+  [x] docs/DESPLIEGUE_PREESCOLAR_FORMATIVOS.md
+        - Resumen de cambios
+        - Orden de ejecución (CONFIG, ALUMNOS, EVALUACIONES header, deploy, seeds)
+        - Credenciales M10/M11/M12
+        - Verificación end-to-end (preescolar, formativos, regresión, voz)
+        - Punto de restauración
+
+================================================================================
+CIERRE DÍA 2 (2026-08-15)
+================================================================================
+
+BACKEND DESPLEGADO Y FUNCIONANDO:
+  [x] 23 cols en EVALUACIONES (A-W) + 24 NombreAlumno (X) para auditoría
+  [x] Headers Sheets: R-W formativos, X NombreAlumno
+  [x] Modo cualitativo (preescolar): funciona end-to-end
+  [x] Modo numérico + formativos (1°-6° primaria y 1°-3° secundaria): funciona
+  [x] Maestros M10/M11/M12 creados, 45预留 con PINs
+
+FRONTEND DESPLEGADO Y FUNCIONANDO:
+  [x] Modal cualitativo (sin calif/asist/tareas) ✓
+  [x] Modal numérico con bloque "Otros formativos" (Len/EdFis/Comp) ✓
+  [x] Portal padres bifurcado:
+      - Cualitativo: chip nivel + mensaje del docente (sin odómetros) ✓
+      - Numérico: tarjeta normal + bloque "Otros formativos" ✓
+  [x] Versioning: ?v=6 docente, ?v=5 padres
+
+PENDIENTE PARA MAÑANA (decisión del usuario):
+  [?] Analítica cualitativa (preescolar):
+      - Backend: leerAnaliticaMaestro_ ya detecta modo y devuelve null indicePromedio
+        + numAlumnosPorNivel {1,2,3,4}
+      - Frontend: renderAnalitica bifurca a renderAnaliticaCualitativa_
+      - Resultado parcial: KPIs reemplazados (Nivel más común, etc.) + chart bar nuevo
+      - Duda usuario: "puede que funcione, mañana lo analizo con más calma"
+      - Acción: usuario prueba en navegador y reporta comportamiento exacto
+
+BACKUPS:
+  Snapshot completo: WilhelmWundtv2_backup_PreCambios_2026-08-14
+  Carpeta de trabajo: WilhelmWundtv2_backup_PreFase2
+
+CREDENCIALES OPERATIVAS:
+  M10/M11/M12 preescolar: wundtM10/11/12
+  PINs 45预留: anotados por el usuario (no en este archivo)
+
+================================================================================
+FIN CIERRE DÍA 2
+================================================================================
+
+================================================================================
+ARCHIVOS SIN CAMBIOS (por diseño)
+================================================================================
+
+backend/Code.gs (lógica de router intacta, solo modifico una acción)
+backend/install/ (snapshots de referencia, no se tocan)
+backend/DEPLOY.md (guía previa, no se actualiza hoy)
+frontend/docente/assets/js/voz.js (sin cambios — voz sigue funcionando)
+frontend/docente/index.html (modal inyectado dinámicamente)
+frontend/padres/index.html (cambios son solo en ui.js)
+frontend/compartido/assets/css/app.css (chips y badges ya existen)
+docs/api_contrato.md (no se actualiza hoy; documentar después si quieres)
+docs/casos_prueba.md (no se actualiza hoy)
+docs/esquema_datos.md (no se actualiza hoy)
+
+================================================================================
+NOTAS / DECISIONES EN VIVO
+================================================================================
+
+(Se irá actualizando conforme avance)
+
+================================================================================
+FIN BITÁCORA
+================================================================================

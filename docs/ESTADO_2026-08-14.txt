@@ -1,0 +1,192 @@
+================================================================================
+WILHELM WUNDT v2 — ESTADO DE SESIÓN 2026-08-14
+================================================================================
+
+Estado general: BACKEND ✅ + DOCENTE ✅ + PADRES ✅ (en su mayoría).
+Pendiente: detalles que se confirmarán al inicio de esta sesión.
+
+================================================================================
+DÓNDE ESTAMOS
+================================================================================
+
+Ruta del proyecto (carpeta viva):
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2
+
+Estructura clave:
+  backend/    → 7 archivos .gs (Code, lib_sheets, lib_auth, lib_calculos,
+                lib_validaciones, lib_logs, diagnostico) + install/ snapshots
+  frontend/
+    compartido/    → assets/css/app.css + assets/img/ (logos, fondos)
+    docente/       → index.html + assets/js/{api,ui,modelos,voz}.js
+    padres/        → index.html + assets/js/{api,ui,narrativa}.js
+  docs/       → roadmap, esquema, api_contrato, casos_prueba, resúmenes previos
+  test_local.js
+
+URL del deploy (producción, sin cambios desde 2026-08-02):
+  https://script.google.com/macros/s/AKfycbwdVP-UxhfGYraVDetQZPN-XRnCEjQ35c-OZn3cztt12heMul2nLnNxPZX0TQDM0Q/exec
+
+Cache-bust del frontend:
+  CSS ?v=2 (padres) / ?v=3 (docente)
+  JS ui.js ?v=3
+  window.WUNDT_VERSION = '3.0'
+
+URLs de prueba local:
+  http://localhost:8080/docente/   (M03 / wundtM03)
+  http://localhost:8080/padres/    (AlumnoID + PIN 4 dígitos)
+
+Sheets de base de datos:
+  CONFIG, ALUMNOS, EVALUACIONES, MAESTROS_AUTH, ACCESOS_PADRES, BACKUP_LOGS
+
+================================================================================
+QUÉ SE HIZO (HISTORIAL RESUMIDO)
+================================================================================
+
+2026-07-31 (RESUMEN_2026-07-31.txt):
+  - Backend completo: 7 .gs, auth HMAC, upsert, auditoría.
+  - Frontend docente y padres funcionando end-to-end.
+  - 16 cuentas (M01-M09, G01-G05, ADM, DIR); 195 alumnos con PINs.
+  - 5 bugs conocidos documentados (caché, args, salt dup, cicloEscolar hardcoded,
+    alumnos duplicados 3.1s).
+
+2026-08-02 (RESUMEN_2026-08-02.txt, palabra clave "VALIDACIÓN"):
+  - Index docente COMPLETO:
+    * Portada animada, header formal, panel analítica (4 KPIs + 2 charts Chart.js).
+    * Tabla con chips pendiente/capturado, modales, validación inline.
+    * voz.js con parser en español ("calificación ocho", "asistencia 90", "tareas 12").
+  - 3 acciones nuevas backend: get_estado_capturas, get_cobertura,
+    get_analitica_docente.
+  - 3 archivos backend modificados: Code.gs, lib_sheets.gs, lib_validaciones.gs.
+  - 5 archivos frontend docente reescritos: index.html, ui.js, modelos.js,
+    api.js, voz.js.
+  - CSS compartido reescrito (sistema de componentes).
+  - 3 bugs arreglados en sesión: SHEETS duplicado, portada 404, validación inline
+    con prefijo corto (cal_, asi_, tar_).
+  - console.log de debug instrumentados (pendiente quitar).
+  - Pendiente: Index Padres, Index Admin, audio.js padres, pdf.js padres.
+
+2026-08-05 (summary_2026-08-05.txt):
+  - Persistencia localStorage en ui.js (clave 'wundtEvaluaciones').
+  - Render inmediato de "✏️ Editar" tras guardar panel individual.
+  - Recarga de analítica tras guardar grupo en Sheets.
+  - Arreglo de sintaxis de toast() que bloqueaba todo el JS.
+  - Eliminada segunda definición duplicada de guardarEvaluacionesLocal.
+  - console.debug de trazabilidad añadidos (pueden eliminarse).
+
+================================================================================
+QUÉ VIENE EN ESTA SESIÓN (2026-08-14)
+================================================================================
+
+Por confirmar con el usuario al inicio de la sesión:
+  - ¿Qué cambios específicos quiere hacer?
+  - ¿Son cambios sobre el módulo docente, padres, admin, o backend?
+  - ¿Hay nuevos requisitos o son ajustes/refinamientos?
+
+Lo que estaba planeado previamente (si quiere retomar el roadmap):
+  - Quitar console.log de debug de ui.js (docente).
+  - audio.js del portal padres (Web Speech API es-MX, rate 0.95).
+  - pdf.js del portal padres (jsPDF CDN, A4, Wundt_{alumnoId}_{mes}_{ciclo}.pdf).
+  - Rediseño visual del index padres (entrada con glass container, charts).
+  - Index admin (filtros cobertura, KPIs globales, Chart.js barras).
+  - Limpieza de bugs menores: salt duplicado, cicloEscolar hardcoded,
+    alumnos duplicados 3.1s.
+
+================================================================================
+ARCHIVOS TOCADOS RECIENTEMENTE (referencia rápida)
+================================================================================
+
+Backend:
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\backend\Code.gs
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\backend\lib_sheets.gs
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\backend\lib_validaciones.gs
+  (Los otros 4 .gs sin cambios desde 2026-07-31)
+
+Frontend docente:
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\index.html
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\assets\js\ui.js
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\assets\js\modelos.js
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\assets\js\api.js
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\assets\js\voz.js
+
+Frontend padres (estado al cierre 2026-08-05):
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\padres\index.html
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\padres\assets\js\ui.js
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\padres\assets\js\api.js
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\padres\assets\js\narrativa.js
+  → Tiene audio por voz (Web Speech API) y botón imprimir/ya-exportar implementado.
+
+Compartido:
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\compartido\assets\css\app.css
+
+================================================================================
+CREDENCIALES ACTIVAS
+================================================================================
+
+Maestros (password = wundt + ID en mayúsculas):
+  M01→wundtM01  M06→wundtM06   G01→wundtG01
+  M02→wundtM02  M07→wundtM07   G02→wundtG02
+  M03→wundtM03  M08→wundtM08   G03→wundtG03
+  M04→wundtM04  M09→wundtM09   G04→wundtG04
+  M05→wundtM05                  G05→wundtG05
+  ADM →wundtADM    DIR→wundtDIR
+
+Padres: AlumnoID (ej. 3.1) + PIN 4 dígitos (en logs de seedPINsPadres).
+
+Funciones administrativas en lib_auth.gs:
+  resetPasswordMaestro(maestroId, password, true)   → resetear pass
+  seedMaestrosCompleto(true)                        → crea/actualiza 16 cuentas
+  seedPINsPadres(true|false)                        → genera PINs (true=regenera)
+  diagnosticoSheets()                               → estado del Sheets
+  diagM03()                                         → diagnóstico de M03
+
+================================================================================
+BUGS CONOCIDOS QUE SIGUEN ABIERTOS
+================================================================================
+
+□ Salt duplicado en lib_auth.gs línea 14 (`return bytes + bytes;`).
+  Bajo impacto. Reemplazar por dos UUIDs concatenados.
+□ state.cicloEscolar hardcoded en modelos.js (funciona, ideal leer de CONFIG).
+□ Alumnos duplicados: 3.1s aparece como "Disponible" y como "AZUARA ESPINOZA
+  DULCE REGINA" en ALUMNOS. Verificar.
+□ console.log de debug en ui.js docente (líneas ~onCambio y ~render).
+  Pendiente quitar para producción.
+□ console.debug de renderAnalitica() en ui.js. Pendiente evaluar si se quitan.
+□ KPIs "En desarrollo" y "Necesitan apoyo" en 0 porque backend no desglosa
+  por semáforo. Calcular en frontend si se requiere.
+
+================================================================================
+CONVENCIONES DE TRABAJO (recordatorio)
+================================================================================
+
+Desarrollo local frontend:
+  cd C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend
+  python -m http.server 8080
+  → http://localhost:8080/docente/  y  http://localhost:8080/padres/
+
+Cambios backend (Apps Script):
+  1. Editar .gs localmente.
+  2. Pegar en Apps Script (script.google.com).
+  3. Implementar → Administrar implementaciones → Editar → Nueva versión.
+  4. URL NO cambia (mismo deploy ID).
+
+Cambios frontend:
+  1. Editar archivo local.
+  2. Incrementar ?v=N en <script>/<link> en index.html (N+1).
+  3. Refrescar navegador con Ctrl+Shift+R (hard reload).
+
+Debug rápido:
+  - Diagnóstico Sheets: Apps Script → diagnosticoSheets()
+  - Health check: GET {URL}?accion=health
+  - Tests lógicos: cd backend && node test_local.js
+
+================================================================================
+PRÓXIMA SESIÓN (cuando regreses)
+================================================================================
+
+Si no terminas hoy, di: "retomar Wilhelm Wundt" y arrancamos por:
+  1. Confirmar qué cambios se pidieron al inicio de esta sesión.
+  2. Actualizar este archivo con el resultado de hoy.
+  3. Continuar con el roadmap.
+
+================================================================================
+FIN DEL ESTADO
+================================================================================

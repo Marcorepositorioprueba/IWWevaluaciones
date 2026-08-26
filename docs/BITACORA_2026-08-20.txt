@@ -1,0 +1,247 @@
+================================================================================
+WILHELM WUNDT v2 — BITÁCORA DE IMPLEMENTACIÓN 2026-08-20
+================================================================================
+
+Trabajo de hoy: UNA sola migración de calado
+  1) PREESCOLAR 3 DIMENSIONES + 10 SUB-OBSERVACIONES
+     Reemplaza el modelo previo (1 nivel 1-4 + 1 observación libre) por:
+       - 3 dimensiones con nivel 1-4 cada una:
+           * Cognitivo (aprendizaje, comprensión, memoria)
+           * Socioemocional (5 sub-aspectos)
+           * Físico (motricidad gruesa/fina, coordinación/equilibrio)
+       - 10 sub-observaciones abiertas (≤500 chars, opcionales)
+       - 3 semáforos independientes (uno por dimensión) en vista padres
+       - Semáforo agregado = peor de los 3 (convención Rojo > Amarillo > Verde)
+
+================================================================================
+PUNTO DE RESTAURACIÓN (si algo se rompe)
+================================================================================
+
+Snapshot completo de la carpeta ANTES de cualquier cambio de hoy:
+  C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreCambios_2026-08-20
+
+Para restaurar TODO el proyecto desde cero:
+  1. Borrar la carpeta actual:     WilhelmWundtv2_backup_PreFase2
+  2. Renombrar el snapshot:        WilhelmWundtv2_backup_PreCambios_2026-08-20
+                                   → WilhelmWundtv2_backup_PreFase2
+  3. Limpiar localStorage del navegador (F12 → Application → Local Storage → Clear)
+  4. Volver a pegar los .gs en Apps Script y desplegar como nueva versión
+
+Para restaurar UN archivo individual:
+  Copiar desde la carpeta snapshot el archivo que necesites, sobreescribir
+  en WilhelmWundtv2_backup_PreFase2\<ruta original>.
+
+================================================================================
+ESQUEMA SHEETS — 41 COLUMNAS (A-AO)
+================================================================================
+
+Bloque legacy (A-X) — sin cambios, vigente para numérico:
+  A ID_Registro, B CicloEscolar, C Mes, D AlumnoID, E MaestroID,
+  F Calificacion_Numerica, G Participacion, H Autogestion, I Colaboracion,
+  J Pensamiento_Critico, K Asistencia_Porcentaje, L Tareas_Entregadas,
+  M Observaciones, N Indice_Desempeno, O Nivel_Riesgo, P Semaforo,
+  Q FechaRegistro, R Len_Calif, S EdFis_Calif, T Comp_Calif,
+  U Len_Obs, V EdFis_Obs, W Comp_Obs, X NombreAlumno
+
+Bloque preescolar (Y-AO) — NUEVO 2026-08-20:
+  Y  Pensamiento_Cognitivo           (1-4)
+  Z  Pensamiento_Socioemocional      (1-4)
+  AA Pensamiento_Fisico              (1-4)
+  AB Obs_Aprendizaje                 (≤500, opcional)
+  AC Obs_Comprension                 (≤500, opcional)
+  AD Obs_Memoria                     (≤500, opcional)
+  AE Obs_Habilidades_Comunicacion    (≤500, opcional)
+  AF Obs_Habilidades_Sociales        (≤500, opcional)
+  AG Obs_Convivencia_Autogestion     (≤500, opcional)
+  AH Obs_Autonomia_Independencia     (≤500, opcional)
+  AI Obs_Resolucion_Conflictos       (≤500, opcional)
+  AJ Obs_Motricidad_Gruesa_Fina      (≤500, opcional)
+  AK Obs_Coordinacion_Equilibrio     (≤500, opcional)
+  AL Semaforo_Cognitivo              (Verde/Amarillo/Rojo, calculado)
+  AM Semaforo_Socioemocional         (Verde/Amarillo/Rojo, calculado)
+  AN Semaforo_Fisico                 (Verde/Amarillo/Rojo, calculado)
+  AO Semaforo_Agregado               (= peor de AL, AM, AN)
+
+Mapeo nivel → semáforo:
+  1 → Rojo (Necesita apoyo)
+  2 → Rojo (En desarrollo)
+  3 → Amarillo (Logro esperado)
+  4 → Verde (Desempeño sobresaliente)
+
+⚠️  FORMATO STRICTO: la columna B (CicloEscolar) DEBE contener el texto
+    literal "2026-07" (no formato fecha). Si el Sheet la convierte a
+    Date, el filtro del backend no encuentra las filas.
+
+================================================================================
+ARCHIVOS MODIFICADOS (código)
+================================================================================
+
+BACKEND (.gs en Apps Script):
+  [x] backend/lib_sheets.gs
+      - SHEETS.EVALUACIONES.headers extendido de 24 → 41 cols (Y-AO)
+      - upsertEvaluacion: reescrito a 1×41, validación defensiva (throw si <41)
+      - leerCapturasMaestro_: 13+4 campos nuevos (desempenoCognitivo, etc.)
+      - leerHistorialAlumno: 13+4 campos nuevos
+      - leerAnaliticaMaestro_: rediseñado para retornar
+        semaforoCountsPorDimension, numAlumnosPorDimension, coberturaObs
+  [x] backend/lib_validaciones.gs
+      - OBS_Preescolar_ (10 obs keys), Niveles_Preescolar_ (3 level keys)
+      - validarEvaluacion bifurca: cualitativo requiere 3 niveles ∈ {1,2,3,4}
+        + 10 obs opcionales ≤500
+  [x] backend/lib_calculos.gs
+      - peorDeTresSemaforos_(sCog, sSoc, sFis) — devuelve el más restrictivo
+  [x] backend/Code.gs
+      - accionSaveEvaluaciones_ calcula 3 semáforos por dimensión
+      - migrarPreescolarADimensiones_v1() — one-shot idempotente
+        (replica Pensamiento_Critico a las 3 dimensiones nuevas)
+
+FRONTEND DOCENTE (carpeta frontend/docente):
+  [x] frontend/docente/assets/js/modelos.js
+      - evaluacionVacia(true): 13 campos (3 niveles + 10 obs + obs general)
+      - hidratarDesdeCapturas: cualitativo lee 3 niveles (con fallback
+        cap.pensamiento) + 10 obs
+      - validarParaEnvio: cualitativo exige 3 niveles 1-4, valida 10 obs ≤500
+      - clasificarCapturas: cualitativo compara 13 campos
+  [x] frontend/docente/assets/js/ui.js
+      - DIMENSIONES_PREESCOLAR_ (constante: 3 dims + 10 sub-aspectos)
+      - renderModalCualitativo: 3 bloques uno por dimensión
+        (rating-row 1-4 + sub-aspectos opcionales)
+      - wireCualitativoListeners: wirea 10 textareas + obs general
+      - setDesempeno(alumnoId, campo, valor, btn) — parametrizado
+      - guardarEvaluaciones: payload cualitativo con 3 niveles + 10 obs
+      - renderAnaliticaCualitativa_: 3 mini-bar charts (uno por dimensión)
+        + tabla de cobertura de sub-observaciones
+      - renderTabla: 3 chips de semáforo por dimensión cuando es cualitativo
+      - renderChipDimension_, renderAcordeonDimension_, etiquetaCortaDim_
+
+FRONTEND PADRES (carpeta frontend/padres):
+  [x] frontend/padres/assets/js/narrativa.js
+      - ETIQUETAS_DIMENSION (cognitivo/socioemocional/fisico)
+      - SUBASPECTOS_POR_DIM (10 sub-aspectos agrupados por dimensión)
+      - generarNarrativaCualitativa: detecta si payload tiene 3 dims
+        (fallback al legado si no), compone resumen + sub-observaciones
+      - generarParrafoSubObservacionesPreescolar: párrafo por dim
+  [x] frontend/padres/assets/js/ui.js
+      - renderCardCualitativa: 3 chips (uno por dimensión) + acordeón
+        (cognitivo expandido, los otros dos colapsados)
+      - renderChipDimension_, renderAcordeonDimension_
+      - SUBASPECTOS_POR_DIM_ (espejo local para render)
+
+CSS COMPARTIDO:
+  [x] frontend/compartido/assets/css/app.css
+      - .dim-block, .dim-subaspect, .dim-subaspectos, .dim-subaspectos-grid
+      - .chip-triple, .dim-chip, .dim-chip-icon, .dim-chip-body
+      - .acordeon-dim, .acordeon-dim-item, .acordeon-dim-summary,
+        .acordeon-dim-body, .dim-sub-item, .dim-sub-tit, .dim-sub-text
+      - .dim-bar-wrap (analítica)
+
+FRONTEND BUMPED:
+  [x] frontend/docente/index.html → ?v=7 (CSS+JS), WUNDT_VERSION='4.2'
+  [x] frontend/padres/index.html → ?v=6 (CSS)
+
+DOCS:
+  [x] docs/esquema_datos.md — sección EVALUACIONES reescrita (41 cols)
+  [x] docs/api_contrato.md — payload cualitativo nuevo + historial cualitativo
+  [x] docs/BITACORA_2026-08-20.txt — este archivo
+
+================================================================================
+DEPLOY (LO QUE SE HIZO HOY)
+================================================================================
+
+✅ 1. Descarga del .xlsx → WilhelmWundt_BD_pre_migracion_2026-08-20.xlsx
+✅ 2. Header extendido a 41 cols A-AO en el Sheet
+✅ 3. Pegados los 4 .gs en Apps Script
+✅ 4. Ejecutada migrarPreescolarADimensiones_v1() — OK
+✅ 5. Implementado backend como nueva versión "v4.2 — Preescolar 3 dimensiones + 10 sub-observaciones"
+✅ 6. Health check OK
+✅ 7. Frontend bumped y recargado con Ctrl+Shift+R
+✅ 8. T7 verificado: M10 muestra modal con 3 bloques de colores
+✅ 9. T9 verificado: captura guardada con 3 niveles + 3 obs (Sheet poblada)
+✅ 10. T11 verificado: validación rechaza 1 nivel faltante (toast amarillo)
+✅ 11. T12 verificado: portal padres P1.1 muestra 3 chips + acordeón
+
+⚠️ BUG ENCONTRADO Y RESUELTO EN SESIÓN:
+   La columna B (CicloEscolar) en el Sheet tenía formato FECHA en lugar
+   del texto "2026-07". El backend no matcheaba. Fix: convertir celdas
+   a texto, escribir "2026-07" literal. Confirmado con la función de
+   debug debugCapturasPreescolar() que sigue en Code.gs.
+
+================================================================================
+PENDIENTE PARA MAÑANA (2026-08-21)
+================================================================================
+
+PRIORIDAD 1 — Limpieza de datos:
+  [ ] Borrar las 2 filas duplicadas de P1.1 en Sheet (quedarse con la
+      más reciente, fila 38 según log de debug). Las otras 2 (34, 36)
+      son de pruebas/debug.
+
+PRIORIDAD 2 — Pruebas adicionales:
+  [ ] T13: Expandir acordeón cognitivo en portal padres → ver 3 sub-aspectos
+  [ ] T14: Dashboard docente → ver 3 distribuciones de barras + cobertura
+  [ ] T15: Comparar analítica nueva con export del Sheet → conteos coinciden
+  [ ] T16: Login primaria → modal numérico normal (regresión)
+  [ ] T17: validarEvaluacion numérico sigue aceptando calificacion (regresión)
+  [ ] T18: leerAnaliticaMaestro_ numérico sigue retornando indicePromedio
+
+PRIORIDAD 3 — Verificación del comportamiento "actualizar vs insertar":
+  [ ] Editar P1.1 ya capturado (cambiar un nivel) → debe ACTUALIZAR la
+    fila existente, no crear una nueva. Validar en el Sheet que sigue
+    habiendo 1 sola fila para P1.1/Agosto/2026-07.
+  [ ] Si crea nueva fila, hay un bug en upsertEvaluacion (probablemente
+    relacionado con el bug del CicloEscolar — el upsert busca por
+    AlumnoID+Mes+CicloEscolar y como no matcheaba, insertaba nueva).
+
+PRIORIDAD 4 — Pruebas de flujo completo:
+  [ ] Captura un nuevo alumno (P1.2, no capturado) → debe crear fila
+  [ ] Captura masiva de varios alumnos a la vez → todas las filas nuevas
+  [ ] Verificar el "contador de listos para enviar" en docente
+  [ ] Verificar el modal de confirmación agrupa "nuevos vs actualizaciones"
+  [ ] Verificar el resumen del toast tras guardado masivo
+
+PRIORIDAD 5 — Verificación portal padres:
+  [ ] Si un alumno está capturado con los 3 niveles, los 3 chips deben
+    coincidir con los 3 semáforos en el Sheet (AL, AM, AN)
+  [ ] El chip del semáforo agregado debe coincidir con AO
+  [ ] El acordeón cognitivo debe arrancar expandido, los otros 2 colapsados
+  [ ] La narrativa debe mencionar las 3 dimensiones y sub-observaciones
+
+================================================================================
+FUNCIÓN DE DEBUG A BORRAR (EN Code.gs)
+================================================================================
+
+Cuando termines la limpieza, eliminar la función:
+  debugCapturasPreescolar()
+
+Solo la necesitaste para diagnosticar el bug del CicloEscolar.
+
+================================================================================
+CONTEXTO PARA RECORDAR (rápido)
+================================================================================
+
+- Proyecto: C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2
+- Tipo: Google Apps Script + HTML/JS frontend (Tailwind CDN + Chart.js CDN)
+- BD: Google Sheets (6 hojas: CONFIG, ALUMNOS, EVALUACIONES, MAESTROS_AUTH,
+  ACCESOS_PADRES, BACKUP_LOGS)
+- AUTH: HMAC + salt, sesión 12h, en sessionStorage['wundt_docente_sesion_v2']
+- Maestros preescolar: M10/M11/M12 (cualitativos) y M01-M09 (numéricos)
+- 135 alumnos reales, 12 grados: 3 preescolar (cualitativos) + 9 numéricos
+- Colores marca: vino/guinda (#6B1F2E / var(--wundt-guinda))
+- ESM modules en frontend (import/export)
+- LocalStorage guarda evaluaciones parciales offline
+- Web Speech API para dictado por voz
+- Memoria: seguimiento-academico-wundt.md (puede re-leerse al inicio)
+
+================================================================================
+FRASE RÁPIDA PARA SESIÓN DE MAÑANA (literal, para que la pegues)
+================================================================================
+
+"Retomar Wilhelm Wundt. Hoy se hizo deploy de la migración 3+10 a
+producción, M10 funciona (3 chips + acordeón en portal padres, validación
+en docente). Quedó pendiente: borrar 2 filas duplicadas de P1.1 en Sheet
+(quedarse con la más reciente), y probar el flujo de actualización
+(editar existente no debe crear fila nueva). Revisar T13-T18 mañana.
+Bitácora completa en docs/BITACORA_2026-08-20.txt."
+
+================================================================================
+FIN BITÁCORA 2026-08-20
+================================================================================

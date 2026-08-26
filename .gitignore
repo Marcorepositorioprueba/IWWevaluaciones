@@ -1,0 +1,48 @@
+# === OS junk ===
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# === Editores ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === Logs y temporales ===
+*.log
+*.tmp
+*.bak
+
+# === Node / npm ===
+node_modules/
+package-lock.json
+
+# === Respaldos previos (NO versionar — son estado histórico, no código activo) ===
+# Si en el futuro los necesitas, están en otras carpetas de C:\Users\leonm\proyectosmarco\
+*_backup_*/
+*_pre_*/
+*_preCambios_*/
+*_post_*/
+*_imprimir_pdf/
+*_2026-08-25_*/
+*_2026-08-26_*/
+*_FASE2*/
+
+# === Apps Script legacy .txt (las plantillas de instalación viven en /install/) ===
+# Los espejos "_PEGAR.gs" SÍ se versionan (necesarios para re-deploys).
+# Los .gs.txt sueltos en la raíz de backend/ son legacy.
+backend/*.gs.txt
+
+# === Ambiente ===
+.env
+.env.local
+.env.*.local
+secrets.gs
+wundt_secret.gs
+
+# === PDFs generados ===
+*.pdf
+!docs/**/*.pdf

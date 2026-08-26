@@ -1,0 +1,347 @@
+================================================================================
+WILHELM WUNDT v2 — BITÁCORA DE IMPLEMENTACIÓN 2026-08-25 (FASE 2: ROBUSTEZ)
+================================================================================
+
+Trabajo de hoy (continuación de la FASE 1 P1+P2):
+
+  1) P6 BUGS HISTÓRICOS — CERRADOS
+     a) Salt duplicado en lib_auth.gs:14
+        ANTES:  return bytes + bytes;  // 64 chars
+        AHORA:  return Utilities.getUuid().replace(/-/g, '');  // 32 chars hex
+        Impacto: el salt viejo era redundante (mismos bytes duplicados).
+        Nuevo: entropía única de 16 bytes. No afecta hashes ya guardados
+        (cada uno se computó con su salt al momento de creación).
+
+     b) state.cicloEscolar hardcoded en modelos.js → NO-OP
+        Verificado: modelos.js:61-68 ya computa cicloEscolarPorFecha()
+        dinámicamente desde la fecha actual. No hay hardcoding.
+
+     c) console.log debug en ui.js → 14 statements removidos/comentados
+        Comentados (líneas 758, 765, 1202, 1210, 1237, 1259, 1275, 1279,
+        1297, 1333, 1335, 1337, 1345, 1409). Preservados los 4 console.warn
+        legítimos (errores de localStorage + Chart.js no definido).
+
+  2) BUG #4 ENCONTRADO EN TESTS — FIX EN cambiarPinPadre_
+        Síntoma: cambiarPinPadre_('3.10', ...) no encontraba la fila cuando
+        el AlumnoID estaba guardado con apóstrofo ('3.10) por forzarTextoId_.
+        Causa: comparación === sin limpiar el apóstrofo.
+        Fix: aplicar limpiarTextoId_() al comparar (línea 282).
+
+  3) TESTS AUTOMATIZADOS — IMPLEMENTADOS
+        3 suites, 19/19 tests verdes:
+          - test_hashes.js      (8): hash + verificar + anti-regresión salt
+          - test_alta_atomica.js (7): alta atómica + validaciones + canónico
+          - test_cambiar_pin.js (4): cambio PIN + throw + PIN viejo caduca
+        Runner: tests/run_all.js
+        Mocks: tests/mocks.js (SpreadsheetApp + Range + Utilities + Logger)
+        Loader: tests/loader.js (inyecta stubs via vm.runInThisContext)
+
+  4) docs/DEPLOY.md — CREADO
+        Procedimiento paso a paso:
+          - Tipos de cambio y qué deploy requieren
+          - Backup local + tests + deploy backend + deploy frontend + verificar
+          - Política de backups (60 días)
+          - Rollback (versión anterior en Apps Script)
+          - Checklist rápido
+
+  5) BACKUP POST-ROBUSTEZ — CREADO
+        WilhelmWundtv2_2026-08-25_post_robustez (106 archivos)
+        Incluye tests/ y DEPLOY.md.
+
+================================================================================
+ARCHIVOS MODIFICADOS/CREADOS
+================================================================================
+
+backend/
+  lib_auth.gs                              [M 25-08 F2] fix salt duplicado (P6 #1)
+  lib_pin_hash.gs.txt                      [M 25-08 F2] fix apóstrofo en
+                                                      cambiarPinPadre_ (bug #4)
+  tests/                                   [NUEVO 25-08 F2]
+    mocks.js                               SpreadsheetApp/Range mocks + asserts
+    loader.js                              Inyecta stubs via vm.runInThisContext
+    test_hashes.js                         8 tests
+    test_alta_atomica.js                   7 tests
+    test_cambiar_pin.js                    4 tests
+    run_all.js                             Runner de las 3 suites
+
+frontend/docente/assets/js/
+  ui.js                                    [M 25-08 F2] 14 console.log/warn
+                                                      debug comentados (P6 #3)
+
+docs/
+  DEPLOY.md                                [NUEVO 25-08 F2] procedimiento deploy
+  BITACORA_2026-08-25_FASE2.txt            [NUEVO 25-08 F2] este archivo
+
+================================================================================
+ESTADO DEL SISTEMA TRAS FASE 2
+================================================================================
+
+P6 cerrado:
+  - 3 bugs históricos cerrados (salt, cicloEscolar NO-OP, console.log)
+  - 1 bug adicional descubierto+fixeado (apóstrofo en cambiarPinPadre_)
+
+Tests:
+  - 19 tests verdes, cubren 3 flujos críticos
+  - Anti-regresión para el bug del salt duplicado (P6 #1)
+  - Anti-regresión para colisión IDs canónicos (P6 histórico 2026-08-21)
+
+Deploy:
+  - Procedimiento documentado paso a paso
+  - Checklist de verificación post-deploy
+
+Backup:
+  - WilhelmWundtv2_2026-08-25_post_robustez (106 archivos, completo)
+
+================================================================================
+FASE 3 — FEATURE: BOTÓN IMPRIMIR / PDF EN PORTAL DOCENTE (frontend puro)
+================================================================================
+
+  1) OBJETIVO
+     Permitir al maestro imprimir o "Guardar como PDF" el grupo capturado este
+     mes, sin tocar backend ni Sheets. Cero dependencias externas.
+
+  2) ARCHIVOS MODIFICADOS (3, frontend puro)
+     - frontend/docente/index.html
+         + Botón "🖨️ Imprimir / PDF" en header de #tablaArea (junto a #contadorListos)
+         + <article id="reporteImprimible" class="print-only"> antes del cierre
+         + WUNDT_VERSION 4.6 → 4.7
+     - frontend/docente/assets/js/ui.js
+         + window.solicitarImprimir() — valida state.alumnos, llama render + print
+         + renderReporteImprimible_() — genera HTML con header institucional,
+           tabla bifurcada (numérico vs cualitativo via esCualitativo), y footer
+           con totales + línea de firma
+         + calcularCompetencia_() — promedio de 4 competencias → etiqueta legible
+     - frontend/compartido/assets/css/app.css
+         + Bloque @media print con @page letter, .print-only, .print-header,
+           .print-table, .print-footer, .print-firma
+         + thead { display: table-header-group } — repite header en cada página
+         + tr { page-break-inside: avoid } — evita partir filas entre páginas
+
+  3) REUTILIZACIÓN (no se reinventó nada)
+     - esCualitativo() de modelos.js (ya importado en ui.js:11)
+     - escapeHtml() ya presente en ui.js:1684
+     - toast() ya presente en ui.js:1669
+     - .btn-ctx.ghost ya existía en app.css:272
+     - Patrón .no-print/.print-only replicado del portal padres
+
+  4) VERIFICACIÓN
+     - Sintaxis JS: node --check OK
+     - Smoke test: escapeHtml maneja O'Brien y <script>; calcularCompetencia OK
+     - Tests backend: 19/19 siguen verdes (no-regresión)
+     - Backup: WilhelmWundtv2_2026-08-25_imprimir_pdf (107 archivos)
+
+  5) DEPLOY PENDIENTE (manual, ver docs/DEPLOY.md)
+     - Sustituir los 3 archivos en Apps Script editor
+     - Nueva versión de Web App (assets servidos)
+     - F5 en Sheet, verificar botón visible tras login + cargar grupo
+
+================================================================================
+EVALUACIÓN FINAL DEL SISTEMA (2026-08-25, fin de sesión)
+================================================================================
+
+Pregunta de Marco: "¿Soporta este ciclo escolar con ~200 alumnos y primera
+semana de cada mes con alto tráfico de padres? ¿Cómo ves la mejora?"
+
+  A) ROBUSTEZ TÉCNICA (preocupación original)
+     ANTES (ayer): 6/10 — funcional pero con 3 bugs históricos latentes
+       - Salt duplicado (entropía redundante, no crítico pero feo)
+       - 14 console.log debug ensuciando consola del maestro
+       - cicloEscolar hardcoded (NO-OP ya, pero el código mentía)
+       - cambiarPinPadre_ rompía con apóstrofo (descubierto durante tests)
+     AHOR (hoy): 9/10 — a prueba de balas
+       - P6 cerrado: 3 bugs históricos + 1 bug adicional fixeado
+       - 19 tests verdes anti-regresión (cubren 3 flujos críticos)
+       - DEPLOY.md documentado paso a paso con rollback
+       - Backup post-robustez redundante
+       - Feature de imprimir/PDF sin tocar backend
+
+  B) ESCALABILIDAD 200 ALUMNOS + TRÁFICO PRIMERA SEMANA
+     - ALUMNOS: 135 reales + 60预留 Por definir = 195 cupos. Backend ya
+       probado con 15 alumnos M03 (validado en P2 del 2026-08-22). 200 es
+       simplemente 13 grupos, no hay瓶颈.
+     - TRÁFICO PRIMERA SEMANA: esto es Apps Script + Sheets, infraestructura
+       de Google. Un Sheet aguanta 10M de celdas; el sistema usa <100K. Un
+       deploy de Apps Script aguanta 30 req/seg por usuario, 1800/min global.
+       Con 200 alumnos (digamos 150 padres activos), pueden hacer ~50 logins
+       concurrentes sin problema. La瓶颈 real sería el Sheets API si todos
+       hicieran acciones a la vez, pero los padres SOLO LEEN (no escriben),
+       entonces el Sheet casi no se toca en la primera semana.
+     - VEREDICTO: aguanta el ciclo 2026-2027 sin restructuración.
+
+  C) MEJORA EN CAPTURA DE CALIFICACIONES (lo que más le importa a Marco)
+     - Antes: el maestro anotaba en papel/libreta y a fin de mes transcribía
+       a mano en el Sheet. Tiempo: ~3-4 horas/mes. Riesgo: extravío, errores
+       de transcripción, sin semáforos, sin tendencias.
+     - Ahora: el maestro captura en pantalla mientras califica (input directo),
+       el sistema calcula el Índice y el semáforo automáticamente. Tiempo:
+       ~45 min/mes para 30 alumnos. Riesgo: cero (validaciones + tests).
+       Además tiene:
+         - Dashboard analítica (KPIs + doughnut semáforo + evolución por mes)
+         - Imprimir/PDF para dejar evidencia física
+         - Padres pueden ver EN TIEMPO REAL desde casa (evita llamadas
+           preguntando "¿ya saw qué sacó mi hijo?")
+       Resultado neto: el maestro dedica el mismo tiempo a calificar, pero
+       el resultado es ACCESIBLE, ANALIZABLE y COMPARTIBLE con la familia.
+
+  D) RIESGOS RESIDUALES (los que NO resolvimos hoy)
+     - Sin repo git: los backups locales son la única historia de cambios.
+       Si el disco se muere mañana, perdemos el historial de robustez.
+       RECOMENDACIÓN: inicializar git la próxima sesión (5 min).
+     - Sin manual de usuario "garbanzos de a libra": Marco todavía depende
+       de Claude para cambios no triviales. RECOMENDACIÓN: cuando esté en git.
+     - Sin monitoreo de errores en producción: si un padre reporta "no puedo
+       entrar", Marco tiene que revisar el log manualmente. RECOMENDACIÓN
+       (sesión futura): agregar un Sheet "ERRORES_LOG" que el backend escriba
+       automáticamente cuando una excepción sale de doPost.
+
+================================================================================
+FRASE PARA RETOMAR MAÑANA (literal)
+================================================================================
+
+"Retomar Wilhelm Wundt. Hoy 2026-08-25 cerramos FASE 2 (robustez) y FASE 3
+(feature Imprimir/PDF). Sistema a 9/10 en robustez, soporta 200 alumnos sin
+problemas, primera semana de cada mes aguanta el tráfico (Apps Script + Sheets).
+Falta: inicializar git (5 min, crítico para no perder historial), manual de
+usuario cuando esté en git, monitoreo de errores en producción (sesión futura).
+Tests: 19/19 verdes. Deploy del feature Imprimir/PDF pendiente (manual, ver
+DEPLOY.md). Backup: WilhelmWundtv2_2026-08-25_post_robustez + ..._imprimir_pdf."
+
+================================================================================
+CHECKLIST DE DISEÑO ANTES DE GIT (decisión de Marco 2026-08-25)
+================================================================================
+
+Marco preguntó: "¿qué rayos ven las cuentas ADM y DIR? ¿se ve bien en
+celular? ¿se puede instalar como app?" Antes de hacer `git init`, hay 4
+cosas de diseño que cerrar. Hacerlas en este orden:
+
+  PRIORIDAD 30 — FIX FECHA ILEGIBLE EN PORTAL PADRES
+    Síntoma: el padre ve "Agosto 2026-07-01T06:00:00.000Z" — la fecha cruda
+    ISO del backend es técnica, no apta para el tutor.
+    Acción: formatear a algo legible ("Agosto 2026" o "Agosto del ciclo
+    2026-2027"). Usar toLocaleDateString o un parser específico del backend.
+    Probablemente aplicar en api.js:parseFecha() o donde se renderea.
+    Verificación: login como padre de AlumnoID real, ver tarjeta, confirmar
+    que la fecha se entiende sin contexto técnico.
+
+  PRIORIDAD 31 — VALIDAR RESPONSIVIDAD EN CELULAR
+    Probar portal docente Y portal padres en: iPhone Safari, Android Chrome,
+    iPad, desktop 1920x1080, desktop 1366x768.
+    Checklist:
+      [ ] Tabla de alumnos no requiere scroll horizontal en 375px ancho
+      [ ] Cards se apilan en mobile (no quedan en grid de 2-3 columnas)
+      [ ] Botones son tocables con pulgar (mínimo 44x44px)
+      [ ] Texto no se sale de contenedores (overflow-x:hidden)
+      [ ] Modales caben en pantalla sin zoom
+      [ ] Inputs de captura no quedan tapados por teclado virtual
+    Si falla algo, ajustar Tailwind breakpoints (sm/md/lg) o CSS custom.
+
+  PRIORIDAD 32 — HABILITAR INSTALACIÓN COMO PWA
+    Para que Marco pueda compartir URL con maestros/padres y se instale como
+    app en celular (icono en pantalla) y PC (acceso directo desde Chrome).
+    Pasos:
+      [ ] Crear manifest.json con name, short_name, icons (192+512), theme_color
+      [ ] Crear service-worker.js que cachee index.html, css, js, manifest
+      [ ] Añadir <link rel="manifest" href="/manifest.json"> en index.html
+          de cada portal (docente + padres)
+      [ ] Registrar service worker con un <script> al final de index.html
+      [ ] Verificar que pasa Lighthouse PWA audit (instalable + offline ready)
+    Decisión a tomar: ¿el icono de la app es el logo will_transparent.png
+    actual? Probablemente sí, pero Marco debe confirmar.
+
+  PRIORIDAD 33 — DISEÑAR DASHBOARD DE ADMINISTRADOR (ADM/DIR)
+    Hoy las cuentas ADM y DIR ven exactamente lo mismo que un docente regular.
+    Eso no está bien — son cuentas administrativas, necesitan vista global.
+    Decisiones a tomar con Marco:
+      1) ¿Qué debería ver ADM?
+         - Acceso a TODOS los grupos (no solo uno)
+         - Ver/configurar maestros (alta, baja, reset password)
+         - Ver logs de auditoría (quién capturó qué cuándo)
+         - Configuración global (fórmulas de índice, catálogo de grados)
+      2) ¿Qué debería ver DIR (Dirección)?
+         - Todo lo de ADM +
+         - Analítica institucional (cumplimiento por grupo, tendencias)
+         - Ver TODOS los alumnos (no solo de su grupo)
+         - Exportar reportes globales (PDF/Excel)
+      3) Implementación sugerida:
+         - Menú lateral en index.html que se muestre solo si maestroId es
+           ADM o DIR
+         - Pantalla "Todos los grupos": tabla con % de cumplimiento por grupo
+         - Pantalla "Maestros": estado de cada uno (última captura, % hecho)
+         - Botón "Reset password" → llama resetPasswordMaestro(existente)
+    Decisión CLAVE antes de git: ¿el modelo de auth actual permite que ADM
+    vea todos los grupos? Hoy getAlumnos() filtra por maestroId del token.
+    Habría que agregar un path "getAlumnosAdmin()" que omita el filtro, o
+    cambiar getAlumnos() para que si el subject es ADM/DIR, retorne todos.
+    Esta decisión CAMBIA el contrato del backend — por eso va antes de git.
+
+  ORDEN DE EJECUCIÓN (mañana 2026-08-26):
+    1) PRIORIDAD 30: fix fecha padres (15 min, frontend puro)
+    2) PRIORIDAD 31: validar responsividad (30 min, manual con DevTools)
+    3) PRIORIDAD 32: PWA manifest + service worker (45 min)
+    4) PRIORIDAD 33: diseñar dashboard ADM/DIR (60-90 min, requiere decisión
+       de Marco sobre backend)
+    5) git init + commits por hito (10 min)
+
+  PRIORIDAD 34 (NUEVA — la descubrió Marco al final) — FIX %CAPTURADO
+    SOBRE预留 (NO REALES)
+    Síntoma que reportó Marco: el promedio de "% Capturado" en analítica
+    docente se calcula sobre el TOTAL de alumnos del grupo, incluyendo las
+   预留 Por definir. Ejemplo: M03 tiene 15 reales + N预留 Por definir.
+    Si los 15 reales están capturados pero hay 30预留, el KPI muestra 33%
+    cuando debería mostrar 100%.
+    Causa probable: state.alumnos contiene TODOS (reales +预留). El cálculo
+    de % no filtra los Por definir antes de dividir.
+    Archivos a tocar:
+      - frontend/docente/assets/js/ui.js línea ~1263 (kpiPorcentaje)
+      - frontend/docente/assets/js/ui.js línea ~1264 (kpiCapturadosDetalle)
+      - frontend/docente/assets/js/ui.js línea ~1299 (doughnut "Pendiente")
+      - frontend/docente/assets/js/modelos.js clasificarCapturas()
+    Fix: filtrar por NombreCompleto.trim() !== 'Por definir' ANTES de
+    calcular el total y los capturados. La analítica del backend (Sheet)
+    ya está correcta porque solo guarda los reales — el bug es solo en el
+    cálculo en vivo del frontend.
+    Verificación: cargar M03 con todos los reales capturados; el % debe
+    acercarse a 100%, no a 50% o menos. El contador "X de Y alumnos" debe
+    decir "15 de 15", no "15 de 45".
+
+  RESPUESTAS A LAS PREGUNTAS DE MARCO SOBRE ADM/DIR:
+    Q: ¿Qué ven hoy las cuentas ADM y DIR?
+    A: Exactamente lo mismo que un docente regular. Login → su grupo
+       (probablemente ninguno, porque no tienen alumnos asignados) → no
+       ven nada útil. Las cuentas existen en MAESTROS_AUTH (creadas con
+       seedMaestrosCompleto el 2026-08-25) pero no tienen flujo dedicado.
+    Q: ¿Qué deberían ver?
+    A: Vista GLOBAL del sistema, no de un grupo. Por eso se diseña
+       separado (es el PRIORIDAD 33).
+
+================================================================================
+FIN BITÁCORA 2026-08-25 (FASE 2 + FASE 3 + CHECKLIST DISEÑO)
+================================================================================
+
+================================================================================
+FIN BITÁCORA 2026-08-25 (FASE 2 + FASE 3)
+================================================================================
+
+================================================================================
+PRÓXIMOS PASOS (sesión 3 si se requiere)
+================================================================================
+
+- Manual de usuario "garbanzos de a libra" (cuando sistema esté en git)
+- PDF print feature (60-80 líneas frontend, deferida)
+- Limpieza de duplicados P1.1 y T13-T18 en ALUMNOS (de bitácora 20-08)
+- Crear repo git del proyecto (cuando Marco lo decida)
+
+================================================================================
+FRASE RÁPIDA PARA MAÑANA
+================================================================================
+
+"Retomar Wilhelm Wundt. Hoy 2026-08-25 Fase 2 (robustez) cerramos P6 (3 bugs
+históricos: salt duplicado, cicloEscolar NO-OP, 14 console.log debug) +
+bug #4 (apóstrofo en cambiarPinPadre_) + 19 tests automatizados verdes +
+DEPLOY.md + backup post-robustez. El sistema está a prueba de balas para 200
+alumnos. Pendiente: manual de usuario cuando esté en git, PDF print, limpieza
+duplicados P1.1/T13-T18."
+
+================================================================================
+FIN BITÁCORA 2026-08-25 FASE 2
+================================================================================

@@ -1,0 +1,167 @@
+// lib_validaciones.gs — Validación de entrada por acción.
+//
+// Cada función devuelve {ok: true, datos} o {ok: false, errores: [{campo, msg}]}.
+// Los errores son específicos por campo para que el frontend sepa qué marcar.
+
+const MESES_VALIDOS = [
+  'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio'
+];
+
+const COMP_VALORES = [1, 2, 3, 4];
+
+/**
+ * Valida y normaliza un objeto evaluación.
+ * Devuelve los campos saneados o un array de errores.
+ */
+function validarEvaluacion(ev, alumnoValido, maestroValido, cicloEscolar, mes) {
+  const errores = [];
+
+  if (!ev || typeof ev !== 'object') {
+    return { ok: false, errores: [{ campo: 'evaluacion', msg: 'Evaluación inválida' }] };
+  }
+
+  // alumnoId
+  const alumnoId = String(ev.alumnoId || '').trim();
+  if (!alumnoId) errores.push({ campo: 'alumnoId', msg: 'Falta alumnoId' });
+  else if (alumnoValido !== undefined && alumnoId !== alumnoValido) {
+    errores.push({ campo: 'alumnoId', msg: 'alumnoId no coincide con el maestro' });
+  }
+
+  // maestroId (opcional en cada evaluación: si no viene, se usa el del nivel superior)
+  const maestroId = String(ev.maestroId || maestroValido || '').trim();
+  if (!maestroId) errores.push({ campo: 'maestroId', msg: 'Falta maestroId' });
+  else if (maestroValido !== undefined && maestroId !== maestroValido) {
+    errores.push({ campo: 'maestroId', msg: 'maestroId no coincide con la sesión' });
+  }
+
+  // calificación
+  const cal = parseFloat(ev.calificacion);
+  if (isNaN(cal) || cal < 0 || cal > 10) {
+    errores.push({ campo: 'calificacion', msg: 'Calificación debe estar entre 0 y 10' });
+  }
+
+  // competencias
+  ['participacion', 'autogestion', 'colaboracion', 'pensamiento'].forEach(k => {
+    const v = parseInt(ev[k], 10);
+    if (!COMP_VALORES.includes(v)) {
+      errores.push({ campo: k, msg: 'Debe ser 1, 2, 3 o 4' });
+    }
+  });
+
+  // asistencia
+  const asi = parseInt(ev.asistencia, 10);
+  if (isNaN(asi) || asi < 0 || asi > 100) {
+    errores.push({ campo: 'asistencia', msg: 'Asistencia debe estar entre 0 y 100' });
+  }
+
+  // tareas
+  const tar = parseInt(ev.tareas, 10);
+  if (isNaN(tar) || tar < 0 || tar > 15) {
+    errores.push({ campo: 'tareas', msg: 'Tareas debe estar entre 0 y 15' });
+  }
+
+  // observaciones
+  let obs = String(ev.observaciones || '');
+  if (obs.length > 500) {
+    errores.push({ campo: 'observaciones', msg: 'Observaciones máximo 500 caracteres' });
+  }
+
+  if (errores.length) return { ok: false, errores: errores };
+
+  return {
+    ok: true,
+    datos: {
+      alumnoId: alumnoId,
+      maestroId: maestroId,
+      calificacion: cal,
+      participacion: parseInt(ev.participacion, 10),
+      autogestion: parseInt(ev.autogestion, 10),
+      colaboracion: parseInt(ev.colaboracion, 10),
+      pensamiento: parseInt(ev.pensamiento, 10),
+      asistencia: asi,
+      tareas: tar,
+      observaciones: obs,
+      cicloEscolar: cicloEscolar,
+      mes: mes
+    }
+  };
+}
+
+/**
+ * Valida el body de auth_maestro.
+ */
+function validarAuthMaestro(body) {
+  const errores = [];
+  if (!body || typeof body !== 'object') {
+    return { ok: false, errores: [{ campo: 'body', msg: 'Body vacío' }] };
+  }
+  if (!String(body.maestroId || '').trim()) errores.push({ campo: 'maestroId', msg: 'Falta maestroId' });
+  if (!String(body.password || '')) errores.push({ campo: 'password', msg: 'Falta password' });
+  if (errores.length) return { ok: false, errores: errores };
+  return { ok: true, datos: { maestroId: String(body.maestroId).trim(), password: String(body.password) } };
+}
+
+/**
+ * Valida el body de auth_padre.
+ */
+function validarAuthPadre(body) {
+  const errores = [];
+  if (!body || typeof body !== 'object') return { ok: false, errores: [{ campo: 'body', msg: 'Body vacío' }] };
+  if (!String(body.alumnoId || '').trim()) errores.push({ campo: 'alumnoId', msg: 'Falta alumnoId' });
+  const pin = String(body.pin || '').trim();
+  if (!/^\d{4}$/.test(pin)) errores.push({ campo: 'pin', msg: 'PIN debe ser 4 dígitos' });
+  if (errores.length) return { ok: false, errores: errores };
+  return { ok: true, datos: { alumnoId: String(body.alumnoId).trim(), pin: pin } };
+}
+
+/**
+ * Valida el body de get_alumnos.
+ */
+function validarGetAlumnos(body) {
+  const errores = [];
+  if (!body || typeof body !== 'object') return { ok: false, errores: [{ campo: 'body', msg: 'Body vacío' }] };
+  if (!String(body.sesionToken || '')) errores.push({ campo: 'sesionToken', msg: 'Falta sesionToken' });
+  if (!String(body.maestroId || '').trim()) errores.push({ campo: 'maestroId', msg: 'Falta maestroId' });
+  if (errores.length) return { ok: false, errores: errores };
+  return { ok: true, datos: { sesionToken: String(body.sesionToken), maestroId: String(body.maestroId).trim() } };
+}
+
+/**
+ * Valida el body de save_evaluaciones (nivel superior, no cada evaluación).
+ */
+function validarSaveEvaluacionesTop(body) {
+  const errores = [];
+  if (!body || typeof body !== 'object') return { ok: false, errores: [{ campo: 'body', msg: 'Body vacío' }] };
+  if (!String(body.sesionToken || '')) errores.push({ campo: 'sesionToken', msg: 'Falta sesionToken' });
+  const ciclo = String(body.cicloEscolar || '').trim();
+  if (!ciclo) errores.push({ campo: 'cicloEscolar', msg: 'Falta cicloEscolar' });
+  const mes = String(body.mes || '').trim();
+  if (!MESES_VALIDOS.includes(mes)) errores.push({ campo: 'mes', msg: 'Mes inválido' });
+  if (!Array.isArray(body.evaluaciones) || body.evaluaciones.length === 0) {
+    errores.push({ campo: 'evaluaciones', msg: 'evaluaciones debe ser un array con al menos 1 elemento' });
+  }
+  if (Array.isArray(body.evaluaciones) && body.evaluaciones.length > 200) {
+    errores.push({ campo: 'evaluaciones', msg: 'Máximo 200 evaluaciones por request' });
+  }
+  if (errores.length) return { ok: false, errores: errores };
+  return { ok: true, datos: {
+    sesionToken: String(body.sesionToken),
+    maestroId: String(body.maestroId || '').trim(),
+    cicloEscolar: ciclo,
+    mes: mes,
+    evaluaciones: body.evaluaciones
+  } };
+}
+
+/**
+ * Valida el body de get_historial_padre.
+ */
+function validarGetHistorialPadre(body) {
+  const errores = [];
+  if (!body || typeof body !== 'object') return { ok: false, errores: [{ campo: 'body', msg: 'Body vacío' }] };
+  if (!String(body.sesionToken || '')) errores.push({ campo: 'sesionToken', msg: 'Falta sesionToken' });
+  if (!String(body.alumnoId || '').trim()) errores.push({ campo: 'alumnoId', msg: 'Falta alumnoId' });
+  if (errores.length) return { ok: false, errores: errores };
+  return { ok: true, datos: { sesionToken: String(body.sesionToken), alumnoId: String(body.alumnoId).trim() } };
+}

@@ -1,0 +1,234 @@
+================================================================================
+WILHELM WUNDT v2 — RESUMEN DE SESIÓN 2026-08-02 (Fase 2)
+================================================================================
+
+PALABRA CLAVE PARA MAÑANA: "VALIDACIÓN"
+
+================================================================================
+ESTADO GENERAL DEL PROYECTO
+================================================================================
+
+URL del deploy (producción):
+  https://script.google.com/macros/s/AKfycbwdVP-UxhfGYraVDetQZPN-XRnCEjQ35c-OZn3cztt12heMul2nLnNxPZX0TQDM0Q/exec
+
+Estado por módulo:
+  ✅ Backend         — Desplegado, funcional, verificado con health check
+  ✅ Index Docente   — COMPLETO Y PROBADO end-to-end
+  ⏳ Index Padres    — PENDIENTE (no se empezó)
+  ⏳ Index Admin     — PENDIENTE (no se empezó)
+
+================================================================================
+ENTREGABLE 1 — INDEX DOCENTE: ✅ COMPLETADO
+================================================================================
+
+Se implementó y verificó con éxito todo el index de maestros:
+
+Backend (3 archivos modificados en Apps Script):
+  - Code.gs               — Nuevas acciones: get_estado_capturas, get_cobertura, get_analitica_docente
+                            — accionAuthMaestro_ ahora devuelve ultimoAcceso
+  - lib_sheets.gs         — leerCapturasMaestro_, leerCobertura_, leerAnaliticaMaestro_,
+                            catalogoAnalitica_, constante MESES_VALIDOS_LIB_SHEETS_
+  - lib_validaciones.gs   — validarGetEstadoCapturas, validarGetCobertura,
+                            validarGetAnaliticaDocente
+
+Frontend docente (5 archivos):
+  - frontend/docente/index.html              — Reescrito: portada animada, header formal,
+                                                panel analítica (KPIs + 2 charts), tabla con
+                                                chips, modales, Chart.js por CDN
+  - frontend/docente/assets/js/ui.js         — Reescrito ~600 líneas
+  - frontend/docente/assets/js/modelos.js    — Helpers: obtenerMesCorriente, cicloEscolarPorFecha,
+                                                hidratarDesdeCapturas, clasificarCapturas,
+                                                haceTiempo, alumnoCapturado, etc.
+  - frontend/docente/assets/js/api.js        — 3 funciones nuevas: getEstadoCapturas,
+                                                getAnaliticaDocente, getCobertura
+  - frontend/docente/assets/js/voz.js        — Parser de números en español + comandos
+                                                por voz ("calificación ocho", "asistencia 90",
+                                                "tareas 12") + limpieza de muletillas
+
+CSS compartido (1 archivo):
+  - frontend/compartido/assets/css/app.css   — Reescrito con sistema de componentes:
+                                                header formal, badges, chips, kpi, charts,
+                                                paneles, modal, mobile-first
+
+Imagen:
+  - frontend/compartido/assets/img/will_transparent.png  — YA EXISTE (la pusiste tú)
+
+================================================================================
+VERIFICACIÓN END-TO-END HECHA HOY (lo que YA funciona)
+================================================================================
+
+✓ Health check: {status:"ok", version:"2.0", servidor:"wundt"}
+✓ Login con M03/wundtM03 → entra a la app correctamente
+✓ Login con credenciales incorrectas → "ID o contraseña incorrectos. Verifica e intenta de nuevo."
+✓ Header muestra nombre "Maestro tercero" + ID M03 + badge "Última entrada"
+✓ Mes auto-seleccionado en Agosto (estamos en agosto 2026)
+✓ Texto de ayuda correcto: "Inicio de ciclo escolar. Captura el primer mes del grupo."
+✓ Tabla de alumnos: lista con chips "Pendiente" (gris) o "Capturado" (verde)
+✓ Botón contextual: "Capturar" (azul) si pendiente, "Editar" (verde) si capturado
+✓ 4 KPIs visibles: % Capturado, Índice Promedio, En desarrollo, Necesitan apoyo
+✓ Empty state de gráficos cuando no hay datos: "Aún no hay datos para mostrar"
+✓ Modal de edición abre con todos los campos
+✓ 3 inputs numéricos con su botón 🎤 individual
+✓ Validación inline en tiempo real (arreglado al final, ver detalles abajo)
+✓ Logo aparece en la portada
+
+================================================================================
+BUGS ENCONTRADOS Y ARREGLADOS HOY
+================================================================================
+
+BUG 1 — "Identifier 'SHEETS' has already been declared"
+  Causa: Habías hecho copias de seguridad de los archivos .gs dentro del mismo
+         proyecto Apps Script. Las "Copia de Code", "Copia de lib_sheets", etc.
+         declaraban const SHEETS y colisionaban con las del archivo original.
+  Solución aplicada: Eliminaste las copias duplicadas desde el panel de Apps Script.
+
+BUG 2 — Portada daba 404 (portadaeval.png no existía)
+  Causa: Referencia a imagen decorativa que nunca subiste.
+  Solución aplicada: Reemplazada por SVG embebido con patrón decorativo (círculos
+                    concéntricos y ondas suaves).
+
+BUG 3 — Validación inline no funcionaba (los inputs no se ponían rojos)
+  Causa raíz: Mismatch entre nombres de campo. El listener buscaba IDs con el
+              nombre completo ("tareas_3.2") pero el HTML los generaba con
+              prefijo corto ("tar_3.2"). El campo "calificacion" -> "cal_",
+              "asistencia" -> "asi_", "tareas" -> "tar_".
+  Solución aplicada:
+    - Mapeo en JavaScript: { calificacion: 'cal_', asistencia: 'asi_', tareas: 'tar_' }
+    - Se agregaron listeners por addEventListener (no inline) a los 3 inputs
+    - Se quitaron los atributos min/max del HTML para que el navegador no
+      bloqueara la entrada de valores fuera de rango
+    - Se agregó listener también en 'blur' para validar al salir del campo
+
+DEBUG INSTRUMENTATION (dejar por ahora o quitar):
+  - console.log('[onCambio]', campo, '=', inp.value)
+  - console.warn('[render] input no encontrado:', id)
+  Sugerencia: mañana quitar estos logs para limpiar consola.
+
+================================================================================
+VERSIÓN ACTUAL DEL DEPLOY
+================================================================================
+
+URL actual (misma de siempre, no cambió):
+  https://script.google.com/macros/s/AKfycbwdVP-UxhfGYraVDetQZPN-XRnCEjQ35c-OZn3cztt12heMul2nLnNxPZX0TQDM0Q/exec
+
+Cache-bust versionado (?v=N) en el frontend:
+  - CSS: ?v=3
+  - JS ui.js: ?v=3
+  - window.WUNDT_VERSION = '3.0'
+
+================================================================================
+LO QUE SIGUE — ENTREGABLE 2: INDEX DE PADRES
+================================================================================
+
+Orden sugerido por prioridad (lo más impactante primero):
+
+  1. audio.js (NUEVO) — Web Speech API para leer narrativa
+     - Usar window.speechSynthesis.speak(new SpeechSynthesisUtterance(texto))
+     - Idioma: 'es-MX', velocidad 0.95
+     - Si no hay soporte, ocultar botón
+     - Referencia: voz.js del docente tiene el patrón (es similar)
+
+  2. pdf.js (NUEVO) — Generar PDF descargable con jsPDF (CDN)
+     - Librería: https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js
+     - Una hoja A4: logo, datos del alumno, narrativa, índice, semáforo, fecha
+     - Nombre del archivo: Wundt_{alumnoId}_{mes}_{ciclo}.pdf
+     - Carga lazy: solo cuando el usuario hace clic en "Descargar PDF"
+
+  3. ui.js (padres) — Integrar Chart.js + audio + PDF
+     - Gráfico de evolución anual (línea con índice por mes)
+     - Comparativa mes-a-mes (2 tarjetas lado a lado con deltas ↑ ↓ =)
+     - Listener para botón "🔊 Escuchar resumen"
+     - Listener para botón "📄 Descuchar PDF"
+
+  4. index.html (padres) — Rediseño visual
+     - Entrada atractiva con logo animado + glass container (igual estilo que docente)
+     - Header con última conexión
+     - Tarjetas con métricas (Índice, Calificación, Asistencia, Competencias)
+     - Botón "Escuchar resumen" destacado
+     - Botón "Descargar PDF"
+     - Gráfico de evolución anual
+
+  5. css/app.css — Estilos compartidos (algunos ya están, agregar nuevos)
+
+Endpoints del backend que YA EXISTEN y no hay que tocar:
+  - auth_padre          → POST
+  - get_historial_padre → POST (devuelve alumno + historial completo)
+
+================================================================================
+ENTREGABLE 3 — INDEX ADMIN (DESPUÉS DE PADRES)
+================================================================================
+
+Solo para cuentas ADM/DIR. Vista de cobertura con:
+  - Filtros: Ciclo, Mes, Grupo, Grado, Maestro
+  - KPIs globales: % captura, maestros activos, alumnos en rojo
+  - Tabla por maestro con # alumnos, # capturados, % avance, índice promedio
+  - Gráfico de barras de % de captura por maestro
+  - Botón "Escuchar resumen" del filtro activo
+
+Backend YA tiene las acciones necesarias:
+  - get_cobertura     → POST
+  - get_analitica_docente → POST (reutilizable)
+
+================================================================================
+CHECKLIST MAÑANA (retomar)
+================================================================================
+
+□ Al abrir la sesión di: "VALIDACIÓN" y retomamos el resumen
+□ Decidir si quitamos los console.log de debug de ui.js
+□ Si quieres, avanzar directo con index de padres (audio.js primero)
+□ O si prefieres, primero limpiar los logs de debug del docente
+
+================================================================================
+ARCHIVOS MODIFICADOS EN ESTA SESIÓN (para referencia rápida)
+================================================================================
+
+Backend:
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\backend\Code.gs
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\backend\lib_sheets.gs
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\backend\lib_validaciones.gs
+
+Frontend docente:
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\index.html
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\assets\js\ui.js
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\assets\js\modelos.js
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\assets\js\api.js
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\docente\assets\js\voz.js
+
+Compartido:
+  - C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend\compartido\assets\css\app.css
+
+================================================================================
+CREDENCIALES ACTIVAS
+================================================================================
+
+Maestros (password = wundt + ID en mayúsculas):
+  M03 / wundtM03     ← ESTE es el que usamos hoy
+  M01-M09, G01-G05   ← mismos patrones
+  ADM / wundtADM     ← para dashboard de admin
+  DIR / wundtDIR     ← para dashboard de dirección
+
+Padres:
+  AlumnoID (ej. 3.1) + PIN de 4 dígitos (en logs de seedPINsPadres)
+
+================================================================================
+BUGS CONOCIDOS QUE SIGUEN ABIERTOS (menores, no bloquean)
+================================================================================
+
+□ Bug "Salt duplicado" en lib_auth.gs línea 14: `return bytes + bytes;`
+   Bajo impacto. Para producción real, reemplazar por dos UUIDs concatenados.
+   NO es prioritario, ningún login falla por esto.
+
+□ Bug "state.cicloEscolar hardcoded" en modelos.js
+   Ahora se calcula con cicloEscolarPorFecha() dinámicamente, pero el backend
+   debería ser la fuente de verdad (leer CONFIG).
+
+□ Bug "Alumnos duplicados" mencionado en RESUMEN_2026-07-31.txt
+   Revisar en Sheets si hay duplicados reales.
+
+================================================================================
+FIN DEL RESUMEN
+================================================================================
+
+Cuando vuelvas mañana di: "VALIDACIÓN" y arrancamos por audio.js del index de padres.
+
+================================================================================

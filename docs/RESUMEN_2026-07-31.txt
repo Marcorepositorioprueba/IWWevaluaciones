@@ -1,0 +1,327 @@
+================================================================================
+WILHELM WUNDT v2 — RESUMEN EJECUTIVO
+Fecha: 2026-07-31 (noche)
+Estado: BACKEND + DOCENTE + PADRES funcionando end-to-end
+================================================================================
+
+URL del deploy (producción):
+https://script.google.com/macros/s/AKfycbwdVP-UxhfGYraVDetQZPN-XRnCEjQ35c-OZn3cztt12heMul2nLnNxPZX0TQDM0Q/exec
+
+Funciona end-to-end:
+  ✓ Login docente (M03 / wundtM03)
+  ✓ Captura de calificaciones → guarda en Sheets
+  ✓ Cálculo de Índice, Semáforo y Nivel de Riesgo
+  ✓ Login padre (AlumnoID + PIN 4 dígitos)
+  ✓ Dashboard del padre con narrativa
+
+================================================================================
+1. ESTRUCTURA DE ARCHIVOS
+================================================================================
+
+WilhelmWundtv2_backup_PreFase2/
+├── README.md
+├── test_local.js                                (tests lógicos puros)
+├── backend/
+│   ├── Code.gs                                  (router + doGet/doPost)
+│   ├── lib_auth.gs                              (hash, sesiones, seeds)
+│   ├── lib_calculos.gs                          (parser fórmula, índice)
+│   ├── lib_logs.gs                              (logs a BACKUP_LOGS)
+│   ├── lib_sheets.gs                            (lectura/escritura Sheets)
+│   ├── lib_validaciones.gs                      (schemas de entrada)
+│   ├── diagnostico.gs                           (función invocable)
+│   ├── DEPLOY.md                                (guía de despliegue)
+│   └── install/                                 (snapshots para copiar)
+│       ├── 01-Code.gs.txt
+│       ├── 02-lib_sheets.gs.txt
+│       ├── 03-lib_auth.gs.txt
+│       ├── 04-lib_calculos.gs.txt
+│       ├── 05-lib_validaciones.gs.txt
+│       ├── 06-lib_logs.gs.txt
+│       └── 07-diagnostico.gs.txt
+├── docs/
+│   ├── api_contrato.md                          (request/response por acción)
+│   ├── casos_prueba.md                          (checklist QA)
+│   ├── esquema_datos.md                         (mapa Sheets)
+│   ├── GUIA_COPIADO_BACKEND.md
+│   ├── ROADMAP.md
+│   └── RESUMEN_2026-07-31.txt                   (ESTE ARCHIVO)
+└── frontend/
+    ├── compartido/
+    │   └── assets/
+    │       ├── css/app.css                      (estilos custom)
+    │       └── img/                             (logos)
+    ├── docente/
+    │   ├── index.html                           (módulo docentes)
+    │   └── assets/js/
+    │       ├── api.js                           (llamadas HTTP)
+    │       ├── modelos.js                       (state, validaciones)
+    │       ├── ui.js                            (render, eventos)
+    │       └── voz.js                           (Web Speech API)
+    └── padres/
+        ├── index.html                           (módulo padres)
+        └── assets/js/
+            ├── api.js                           (llamadas HTTP)
+            ├── narrativa.js                     (generador de frases)
+            └── ui.js                            (render, eventos)
+
+
+================================================================================
+2. SHEETS — ESTRUCTURA EXACTAMENTE COMO LA TIENES
+================================================================================
+
+CONFIG
+  Headers: TIPO | VALOR_ID | DESCRIPCION
+  - Filas: Maestros M01-M09, Periodo 2026-07, Categorías de competencias
+
+ALUMNOS
+  Headers: AlumnoID | NombreCompleto | Grupo | Grado | MaestroID
+  - 195 alumnos (reales + 91 reservas "Disponible N")
+  - Formatos de ID: 1.X, 2.X, 3.X, 4.X, 5.X, 6.X, 1.Xs, 2.Xs, 3.Xs
+
+EVALUACIONES
+  Headers: ID_Registro | CicloEscolar | Mes | AlumnoID | MaestroID |
+           Calificacion_Numerica | Participacion | Autogestion |
+           Colaboracion | Pensamiento_Critico | Asistencia_Porcentaje |
+           Tareas_Entregadas | Observaciones | Indice_Desempeno |
+           Nivel_Riesgo | Semaforo | FechaRegistro
+  - 17 columnas (backend escribe TODAS, incluyendo las calculadas)
+
+MAESTROS_AUTH
+  Headers: MaestroID | PasswordHash | Salt | Activo | UltimoAcceso
+  - 16 cuentas: M01-M09, G01-G05, ADM, DIR
+  - Password único con variante: wundtM01, wundtM02, ..., wundtADM, wundtDIR
+
+ACCESOS_PADRES
+  Headers: AlumnoID | PINHash | Salt | TutorNombre | TutorEmail |
+           TutorTelefono | Activo | FechaAlta
+  - 195 filas (PINs para todos los alumnos)
+  - PINs en plano: 4 dígitos, hasheados con SHA-256
+
+BACKUP_LOGS
+  Headers: Fecha | Payload | Estado
+  - Auditoría de todos los POST
+
+
+================================================================================
+3. CREDENCIALES ACTIVAS
+================================================================================
+
+DOCENTES (password = wundt + ID en mayúsculas):
+  M01 → wundtM01    M06 → wundtM06
+  M02 → wundtM02    M07 → wundtM07
+  M03 → wundtM03    M08 → wundtM08
+  M04 → wundtM04    M09 → wundtM09
+  M05 → wundtM05    G01 → wundtG01
+                       G02 → wundtG02
+  CONTROL:           G03 → wundtG03
+  ADM → wundtADM    G04 → wundtG04
+  DIR → wundtDIR    G05 → wundtG05
+
+PADRES:
+  AlumnoID (ej. 3.1) + PIN de 4 dígitos (en logs de seedPINsPadres)
+
+⚠️ Cambiar la contraseña de un maestro:
+   resetPasswordMaestro("M03", "wundtM03", true)
+   ⚠️ El 3er argumento true sobreescribe
+
+⚠️ Regenerar PINs de padres:
+   seedPINsPadres(true)   # regenera TODOS
+   seedPINsPadres(false)  # solo los faltantes
+
+
+================================================================================
+4. FUNCIONES DE ADMINISTRACIÓN (en lib_auth.gs)
+================================================================================
+
+Para correr en Apps Script → seleccionar función → ▶ Ejecutar:
+
+  resetPasswordMaestro("M03", "wundtM03", true)
+    → Resetea password de un maestro
+
+  seedMaestrosCompleto(true)
+    → Crea/actualiza los 16 maestros con variante wundtXXX
+    → true = sobreescribe / false = solo crea faltantes
+
+  seedPINsPadres(true)
+    → Genera PINs para todos los alumnos que aún no tienen
+    → true = regenera todos / false = solo faltantes
+
+  diagnosticoSheets()
+    → Imprime estado de todas las hojas (válido Headers, conteos)
+
+  diagM03()
+    → Diagnóstico específico de M03 (hash vs candidato)
+
+  listarPINsActivos()
+    → Lista los alumnos con PIN (no muestra PIN en plano)
+
+  _resetM03Ahora()
+    → Wrapper de ejemplo que llama resetPasswordMaestro('M03','wundtM03',true)
+    → Útil cuando Apps Script no detecta los argumentos
+
+  _resetTodosConVariante()
+    → Resetea los 16 con la variante wundtXXX
+
+
+================================================================================
+5. WORKFLOW DE TRABAJO (cuando regreses)
+================================================================================
+
+A. Desarrollo local:
+   1. cd C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend
+   2. python -m http.server 8080
+   3. Abre http://localhost:8080/docente/ o http://localhost:8080/padres/
+
+B. Desplegar cambios al backend:
+   1. Editar el archivo .gs en Apps Script
+   2. Implementar → Administrar implementaciones → Editar
+   3. Versión: NUEVA versión → Implementar
+   4. La URL no cambia (mismo deploy ID)
+
+C. Cambios en frontend:
+   1. Editar archivo local
+   2. Refrescar el navegador con Ctrl+Shift+R (hard reload)
+   3. Para evitar caché, agregar ?v=N al script tag en HTML
+
+D. Pruebas rápidas:
+   - Diagnóstico: Apps Script → diagnosticoSheets() → Ver registros
+   - Health check: GET https://script.google.com/macros/s/AKfycbw.../exec?accion=health
+   - Tests lógicos: cd backend && node test_local.js
+
+
+================================================================================
+6. BUGS CONOCIDOS (trabajados pero conviene saber)
+================================================================================
+
+1. CACHÉ AGRESIVA DEL NAVEGADOR
+   Síntoma: el navegador sigue ejecutando JS viejo aunque cambies el código
+   Solución: Ctrl+Shift+R o agregar ?v=2 al tag <script>
+
+2. ARGUMENTOS EN APPS SCRIPT
+   Síntoma: funciones que toman argumentos reportan "falta parámetro"
+   Solución: usar función envoltorio (ej. _resetM03Ahora) sin argumentos
+
+3. SALT DUPLICADO
+   En lib_auth.gs línea 14: `return bytes + bytes;` duplica el UUID
+   Esto NO es bug crítico (el hash sigue siendo válido), pero el salt
+   tiene menos entropía de la deseada. Para producción real,
+   reemplazar por:
+     const bytes = Utilities.getUuid().replace(/-/g, '');
+     const bytes2 = Utilities.getUuid().replace(/-/g, '');
+     return bytes + bytes2;
+   Bajo prioridad: ningún login falla por esto.
+
+4. UI.JS: state.cicloEscolar hardcoded
+   En modelos.js línea 22: `cicloEscolar: '2026-07'`
+   Funciona porque coincide con CONFIG, pero idealmente leer de CONFIG.
+   Para cambiar el ciclo a "2026-08" o "2027-07", editar esa línea.
+
+5. ALUMNOS DUPLICADOS (3.1s aparece dos veces en "Disponible")
+   En tu hoja actual hay "3.1s" listado como "Disponible" pero también
+   "AZUARA ESPINOZA DULCE REGINA" como 3.1s. Verifica que no haya
+   duplicados reales. Si los hay, eliminar las filas duplicadas.
+
+
+================================================================================
+7. LO QUE FALTA (PRIORIZADO)
+================================================================================
+
+CRÍTICO (antes de pasar a producción):
+  [ ] Verificar ACCESOS_PADRES tiene headers exactos
+  [ ] Confirmar que no hay alumnos duplicados en Sheets
+  [ ] Probar flujo docente→padres con TODOS los meses del año
+  [ ] Hacer backup de Sheets (antes de cualquier deploy)
+
+IMPORTANTE (mejoras UX):
+  [ ] Mensajes de error específicos en captura docente
+      (actualmente muestra toast genérico, idealmente resaltar campo)
+  [ ] Validación inline en cada input (color rojo si inválido)
+  [ ] Confirmación antes de guardar (modal "Estás a punto de guardar 25 evaluaciones")
+  [ ] Indicador visual de "ya capturado" vs "pendiente" en la tabla
+  [ ] Mostrar el semáforo calculado en la tabla docente (no solo en padre)
+  [ ] Permitir EDITAR evaluaciones ya guardadas (actualmente solo inserta/actualiza)
+
+MEJORAS (cuando estén las bases sólidas):
+  [ ] Dashboard docente con Chart.js (promedio del grupo, distribución)
+  [ ] Cambiar cicloEscolar a lectura dinámica desde CONFIG
+  [ ] Exportar historial a PDF (botón en portal padres)
+  [ ] Notificaciones automáticas a padres cuando hay nueva evaluación
+  [ ] Cambio de password desde el portal docente
+  [ ] Login social (Google) en vez de password manual
+
+DESEABLE (futuro):
+  [ ] App móvil (PWA installable)
+  [ ] Multiidioma (inglés para padres bilingües)
+  [ ] Backup automático de Sheets a otra ubicación
+  [ ] Generador deNarrativas más rico (preferencias del tutor)
+
+
+================================================================================
+8. CHECKLIST MAÑANA (cuando regreses)
+================================================================================
+
+□ Verificar que el deploy en Apps Script sigue activo
+  (script.google.com → tu proyecto → Implementar)
+
+□ Verificar que los passwords en MAESTROS_AUTH siguen siendo los correctos
+  (si alguien los cambió manualmente, hay que regenerar)
+
+□ Probar login con M03 / wundtM03 desde el portal docente
+  (http://localhost:8080/docente/)
+
+□ Probar login padre con algún AlumnoID + PIN
+  (http://localhost:8080/padres/)
+
+□ Revisar BACKUP_LOGS para ver si hay errores recientes
+  (cada día deberías ver entradas OK de los POSTs)
+
+□ Si hay cambios nuevos en código backend:
+  - Hacer cambios locales
+  - Copiar a Apps Script
+  - Implementar nueva versión
+  - Refrescar frontend con Ctrl+Shift+R
+
+□ Si hay cambios en frontend:
+  - Hacer cambios locales
+  - Agregar ?v=N (incrementar N) al tag <script>
+  - Refrescar navegador
+
+
+================================================================================
+9. CONTACTOS Y RECURSOS
+================================================================================
+
+- Google Sheets: [tu link aquí]
+- Apps Script: https://script.google.com (busca "Wilhelm Wundt")
+- Documentación del proyecto: carpeta docs/
+- Plan original: backend/2026-07-27-223212-estoy-haciendo-un-proyecto-...txt
+- Este resumen: docs/RESUMEN_2026-07-31.txt
+
+
+================================================================================
+10. CITAS RÁPIDAS (para que copies y pegues)
+================================================================================
+
+Comando para arrancar servidor:
+  cd C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2\frontend
+  python -m http.server 8080
+
+URL del deploy:
+  https://script.google.com/macros/s/AKfycbwdVP-UxhfGYraVDetQZPN-XRnCEjQ35c-OZn3cztt12heMul2nLnNxPZX0TQDM0Q/exec
+
+URL del portal docente:
+  http://localhost:8080/docente/
+
+URL del portal padres:
+  http://localhost:8080/padres/
+
+Resetear password de un maestro:
+  resetPasswordMaestro("M03", "wundtM03", true)
+
+Regenerar PINs de todos los padres:
+  seedPINsPadres(true)
+
+================================================================================
+FIN DEL RESUMEN
+Cuando regreses, dime: "ya estoy de regreso" y retomamos desde donde quedamos.
+================================================================================

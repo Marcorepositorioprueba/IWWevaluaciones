@@ -1,0 +1,108 @@
+// diagnostico.gs — Funciones para ejecutar manualmente desde el editor.
+//
+// Cada función es invocable: seleccionas y das Run. Imprime logs con formato claro.
+
+/**
+ * Diagnóstico completo. Imprime el estado de cada hoja y valida headers.
+ * Ejecutar: diagnosticoSheets()
+ */
+function diagnosticoSheets() {
+  Logger.log('=== DIAGNÓSTICO WILHELM WUNDT V2 ===');
+  Logger.log('Fecha: ' + new Date().toISOString());
+  Logger.log('');
+
+  let todosOk = true;
+
+  Object.keys(SHEETS).forEach(key => {
+    const def = SHEETS[key];
+    try {
+      const sh = getSS_().getSheetByName(def.nombre);
+      if (!sh) {
+        Logger.log('✗ ' + def.nombre.padEnd(20) + ' NO EXISTE');
+        todosOk = false;
+        return;
+      }
+      const ultimaFila = sh.getLastRow();
+      const filas = Math.max(0, ultimaFila - 1);
+      const headersOk = validarHeaders(def.nombre, def.headers);
+      const status = headersOk.ok ? '✓' : '⚠';
+      Logger.log(status + ' ' + def.nombre.padEnd(20) + ' ' + filas + ' filas | headers ' + (headersOk.ok ? 'OK' : 'con problemas'));
+      if (!headersOk.ok) {
+        headersOk.faltantes.forEach(f => {
+          Logger.log('    Header en col ' + f.pos + ': esperaba "' + f.esperado + '", encontré "' + f.actual + '"');
+        });
+        todosOk = false;
+      }
+    } catch (e) {
+      Logger.log('✗ ' + def.nombre.padEnd(20) + ' ERROR: ' + e.message);
+      todosOk = false;
+    }
+  });
+
+  Logger.log('');
+  Logger.log('=== Resumen ===');
+  Logger.log('Maestros en CONFIG: ' + ((leerConfig().Maestro || []).length));
+  Logger.log('Alumnos cargados: ' + (leerFilas('ALUMNOS').filas.length));
+  Logger.log('Evaluaciones registradas: ' + (Math.max(0, getHoja('EVALUACIONES').getLastRow() - 1)));
+  Logger.log('Logs acumulados: ' + (Math.max(0, getHoja('BACKUP_LOGS').getLastRow() - 1)));
+  Logger.log('');
+  Logger.log(todosOk ? '✅ Sistema listo para producción.' : '❌ Hay problemas. Revisa lo de arriba.');
+
+  return { ok: todosOk };
+}
+
+/**
+ * Crea la hoja MAESTROS_AUTH con 9 filas seed (M01-M09) y genera passwords temporales.
+ * Ejecutar UNA VEZ al inicio. Anota los passwords impresos.
+ *
+ * Ejecutar: crearMaestrosAuth()
+ */
+function crearMaestrosAuth() {
+  Logger.log('=== CREAR MAESTROS_AUTH ===');
+  const creds = altaMaestrosSeed();
+  Logger.log('Credenciales generadas (entregar a cada maestro por canal seguro):');
+  Logger.log('');
+  Object.keys(creds).forEach(id => {
+    Logger.log('  ' + id + '  →  ' + creds[id]);
+  });
+  Logger.log('');
+  Logger.log('✅ MAESTROS_AUTH lista.');
+  return creds;
+}
+
+/**
+ * Diagnóstico rápido del Sheets: cuentas y cabeceras.
+ * Útil para pegar en issues o soporte.
+ */
+function diagnosticoRapido() {
+  const cfg = leerConfig();
+  Logger.log('CONFIG:');
+  Object.keys(cfg).forEach(tipo => {
+    Logger.log('  ' + tipo + ': ' + cfg[tipo].length + ' entradas');
+  });
+  const alumnos = leerFilas('ALUMNOS').filas;
+  Logger.log('ALUMNOS: ' + alumnos.length);
+  Logger.log('  Por definir: ' + alumnos.filter(a => String(a.NombreCompleto || '').trim() === 'Por definir').length);
+  Logger.log('  Con nombre:   ' + alumnos.filter(a => String(a.NombreCompleto || '').trim() !== 'Por definir').length);
+  try {
+    Logger.log('EVALUACIONES: ' + Math.max(0, getHoja('EVALUACIONES').getLastRow() - 1));
+  } catch (e) {
+    Logger.log('EVALUACIONES: no existe aún');
+  }
+}
+
+/**
+ * Prueba la fórmula del índice con un caso conocido.
+ * Ejecutar: probarFormulaIndice()
+ */
+function probarFormulaIndice() {
+  const casos = [
+    { nombre: 'Caso perfecto', ev: { calificacion: 10, asistencia: 100, tareas: 15, pensamiento: 4, participacion: 4, autogestion: 4, colaboracion: 4 } },
+    { nombre: 'Caso promedio', ev: { calificacion: 7, asistencia: 80, tareas: 8, pensamiento: 3, participacion: 3, autogestion: 3, colaboracion: 3 } },
+    { nombre: 'Caso crítico', ev: { calificacion: 5, asistencia: 60, tareas: 3, pensamiento: 1, participacion: 1, autogestion: 2, colaboracion: 2 } }
+  ];
+  casos.forEach(c => {
+    const r = calcularIndice(c.ev);
+    Logger.log(c.nombre + ' → indice=' + r.indice + ', semaforo=' + r.semaforo + ', riesgo=' + r.riesgo);
+  });
+}

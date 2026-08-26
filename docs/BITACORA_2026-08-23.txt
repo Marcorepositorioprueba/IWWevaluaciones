@@ -1,0 +1,158 @@
+================================================================================
+WILHELM WUNDT v2 — BITÁCORA DE IMPLEMENTACIÓN 2026-08-23
+================================================================================
+
+Trabajo de hoy (continuación del 2026-08-22):
+
+  1) REFACTOR MAYOR: fórmulas del índice pre-definidas en código
+     - Bug histórico descubierto: el parser de fórmulas en lib_calculos.gs
+       estaba roto desde el inicio. tokenizar_() reemplazaba todos los
+       identificadores alfabéticos por '1' literal, y parsearFormulaFormula_
+       nunca usaba las vars que recibía. Resultado: cualquier fórmula daba
+       siempre ~0.48 independientemente de los valores.
+     - Decisión del usuario: NO arreglar el parser. Reemplazar el sistema
+       por un diccionario de funciones puras.
+     - Solución: dict FORMULAS_INDICE_ con 2 fórmulas:
+         v1 = default histórica (50% cal / 20% asi / 15% tar / 15% comp)
+         v2 = balanceada       (35% cal / 25% asi / 15% tar / 25% comp)
+     - Configuración desde Sheet CONFIG: TIPO=FORMULA_INDICE, VALOR_ID=v1|v2
+     - Comportamiento: sin fila → fallback a v1; VALOR_ID desconocido →
+       fallback a v1 + warning; cambiar entre fórmulas = editar Sheet,
+       sin redeploy.
+     - Archivos tocados:
+         backend/lib_calculos.gs                      [REESCRITO]
+         backend/install/04-lib_calculos.gs.txt      [REGENERADO espejo]
+         backend/diagnostico.gs                       [solo doc comment]
+         docs/esquema_datos.md                        [fila CONFIG]
+         docs/api_contrato.md                         [sección sintaxis]
+         docs/ROADMAP.md                              [cambiar fórmula]
+         WilhelmWundtv2/test_local.js                 [tests del dict]
+
+  2) VALIDACIÓN en producción
+     - probarFormulaIndice() con v2 da:
+         Caso perfecto → indice=10, semaforo=Verde, riesgo=Bajo
+         Caso promedio → indice=6.92, semaforo=Amarillo, riesgo=Medio
+         Caso crítico  → indice=3.97, semaforo=Rojo, riesgo=Alto
+     - 15 alumnos M03 re-capturados con la nueva fórmula
+     - Alumno 3.1 (Azuara): índice pasó de 2.0 a 2.2 (cambio menor esperado)
+     - Promedio general del grupo M03: 4.95 → 4.45 (baja porque ahora
+       competencias pesan más y los promedios de comp=3 se mantienen,
+       mientras el peso de calificación baja de 50% a 35%)
+
+================================================================================
+ARCHIVOS MODIFICADOS (deploy requerido)
+================================================================================
+
+backend/
+  lib_calculos.gs                                [REESCRITO 23-08]
+    + FORMULAS_INDICE_ = { v1, v2 }
+    ~ leerFormulaIndice_  — ahora lookup en dict, no parsea texto
+    ~ calcularIndice      — llama formula.eval(ev) directamente
+    - tokenizar_          [ELIMINADO]
+    - parsearFormulaFormula_  [ELIMINADO]
+    - calcularIndiceDefault_  [ELIMINADO, ahora vive como v1]
+    - PESOS_DEFAULT_      [ELIMINADO, estaba muerto]
+
+  install/04-lib_calculos.gs.txt                [REGENERADO espejo]
+
+  diagnostico.gs                                 [23-08 doc]
+    ~ probarFormulaIndice() — solo doc comment actualizado
+
+docs/
+  esquema_datos.md                               [23-08]
+    ~ Fila CONFIG FORMULA_INDICE: VALOR_ID en vez de DESCRIPCION
+  api_contrato.md                                [23-08]
+    ~ Sección "Sintaxis de fórmula" → "Fórmulas pre-definidas"
+  ROADMAP.md                                     [23-08]
+    ~ "Quiero cambiar la fórmula del índice" apunta a VALOR_ID
+
+WilhelmWundtv2/
+  test_local.js                                  [23-08]
+    - Parser y tests del parser [ELIMINADOS]
+    + Tests del dict FORMULAS_INDICE con v1 y v2
+
+================================================================================
+ESTADO ACTUAL DEL SHEET
+================================================================================
+
+ALUMNOS: sin cambios
+CONFIG: nueva fila FORMULA_INDICE con VALOR_ID=v2, DESCRIPCION=vacío
+EVALUACIONES: 15 filas M03/Agosto/2026-07 (todas como texto literal)
+              Índices recalculados con v2 (35/25/15/25)
+
+================================================================================
+PENDIENTE PARA MAÑANA 2026-08-24
+================================================================================
+
+PRIORIDAD 1 — Validación P4 (portal padres):
+  [ ] Entrar al portal padres con AlumnoID=3.10 + PIN
+  [ ] Confirmar que ve SU evaluación (Aldana Sophia), no la del 3.1
+  [ ] Si el padre tiene PIN, leerHistorialAlumno debe aplicar
+      limpiarTextoId_ correctamente
+  [ ] Validar también con 3.1 para confirmar que el padre de Emiliano
+      ve SU evaluación
+
+PRIORIDAD 2 — Verificar distribución completa de los 15 M03:
+  [ ] Comparar antes/después del cambio de fórmula
+  [ ] Confirmar que el patrón es el esperado:
+      - Alumnos con calif alta (10): índice baja vs v1
+      - Alumnos con calif baja (5):  índice sube menos vs v1
+  [ ] Si el patrón no se cumple, diagnosticar posible bug en cálculo
+
+PRIORIDAD 3 — Bugs históricos (no bloqueantes):
+  [ ] Salt duplicado en lib_auth.gs:14 — `return bytes + bytes;`
+  [ ] state.cicloEscolar hardcoded en modelos.js
+  [ ] console.log debug en ui.js ([onCambio], [render], [renderAnalitica])
+  [ ] Alumnos duplicados en hoja ALUMNOS (3.1s vs AZUARA ESPINOZA DULCE REGINA)
+
+================================================================================
+FRASE RÁPIDA PARA MAÑANA (literal, para que la pegues al inicio)
+================================================================================
+
+"Retomar Wilhelm Wundt. Hoy 2026-08-23 se hizo un refactor mayor del sistema
+de fórmulas del índice: se descubrió que el parser estaba roto desde siempre
+(ignoraba las variables), se reemplazó por un dict FORMULAS_INDICE_ con 2
+fórmulas pre-definidas (v1 default 50/20/15/15, v2 balanceada 35/25/15/25).
+Cambiar fórmula = editar Sheet CONFIG fila FORMULA_INDICE / VALOR_ID. Pendiente
+mañana: validar P4 (portal padres con PIN de 3.10), verificar distribución
+completa de los 15 M03 con v2, y los 3 bugs históricos menores. Bitácora
+completa en docs/BITACORA_2026-08-23.txt. Memorias clave:
+seguimiento-academico-wundt.md, wundt-formulas-predefinidas-2026-08-23.md,
+wundt-formula-indice-2026-08-22.md."
+
+================================================================================
+ARCHIVOS DE MEMORIA RELEVANTES
+================================================================================
+
+- seguimiento-academico-wundt.md          — estado general + política deploys
+- wundt-fixes-2026-08-21.md               — 5 fixes defensivos originales
+- wundt-migracion-2026-08-20.md           — migración 3+10 preescolar
+- wundt-validacion-p1-2026-08-22.md       — P1 cerrado exitoso
+- wundt-validacion-p2-2026-08-22.md       — P2 cerrado exitoso
+- wundt-formula-indice-2026-08-22.md      — distribución A planificada
+- wundt-formulas-predefinidas-2026-08-23.md — refactor mayor de hoy
+- BITACORA_2026-08-20.txt                 — cierre día 1
+- BITACORA_2026-08-21.txt                 — cierre día 2
+- BITACORA_2026-08-23.txt                 — esta bitácora
+
+================================================================================
+CONTEXTO RÁPIDO PARA RECORDAR
+================================================================================
+
+- Proyecto: C:\Users\leonm\proyectosmarco\WilhelmWundtv2_backup_PreFase2
+- API_URL: https://script.google.com/macros/s/AKfycbwdVP-UxhfGYraVDetQZPN-XRnCEjQ35c-OZn3cztt12heMul2nLnNxPZX0TQDM0Q/exec
+- Tipo: Google Apps Script + HTML/JS frontend (Tailwind CDN + Chart.js CDN)
+- BD: Google Sheets (6 hojas: CONFIG, ALUMNOS, EVALUACIONES, MAESTROS_AUTH,
+  ACCESOS_PADRES, BACKUP_LOGS)
+- AUTH: HMAC + salt, sesión 12h, en sessionStorage['wundt_docente_sesion_v2']
+- Maestros preescolar: M10/M11/M12 (cualitativos) y M01-M09 (numéricos)
+- 135 alumnos reales, 12 grados: 3 preescolar (cualitativos) + 9 numéricos
+- ESM modules en frontend (import/export)
+- Cache-bust: ?v=N + WUNDT_VERSION='X.Y' en index.html
+- Fórmula del índice activa: v2 (35/25/15/25) — editada en CONFIG
+- Para deploy: Sustituir archivos .gs en Apps Script, luego
+  Deploy → Manage deployments → New version
+
+================================================================================
+FIN BITÁCORA 2026-08-23
+================================================================================

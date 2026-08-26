@@ -1,0 +1,345 @@
+// lib_auth.gs — Autenticación y autorización.
+//
+// - Hash SHA-256 + salt para passwords y PINs.
+// - Tokens de sesión firmados con HMAC-SHA256.
+// - Funciones para gestionar altas/bajas.
+//
+// En producción, las contraseñas viven en MAESTROS_AUTH hasheadas.
+// Los PINs viven en ACCESOS_PADRES hasheados.
+
+/**
+ * Genera un salt aleatorio en hex (16 bytes = 32 chars).
+ */
+function generarSalt() {
+  const bytes = Utilities.getUuid().replace(/-/g, '');
+  return bytes + bytes; // 32 chars → 64 chars total, suficiente para SHA-256
+}
+
+/**
+ * Hash SHA-256 de (plaintext + salt), en hex.
+ */
+function hashCredencial(plaintext, salt) {
+  if (!plaintext || !salt) throw new Error('hashCredencial: plaintext y salt requeridos');
+  const bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(plaintext) + String(salt)
+  );
+  return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+}
+
+/**
+ * Verifica un (plaintext, salt, hashEsperado).
+ */
+function verificarHash(plaintext, salt, hashEsperado) {
+  const h = hashCredencial(plaintext, salt);
+  return h === String(hashEsperado).trim();
+}
+
+/**
+ * Genera un password temporal alfanumérico de longitud dada.
+ * Usa getUuid como base — no apto para alta seguridad pero
+ * suficiente para que un maestro lo cambie en su primer login.
+ */
+function generarPasswordTemporal(longitud) {
+  longitud = longitud || 8;
+  const alpha = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin I, O, 0, 1
+  let s = '';
+  let u = Utilities.getUuid().replace(/-/g, '');
+  for (let i = 0; i < longitud && i < u.length; i++) {
+    s += alpha.charAt(parseInt(u.charAt(i), 16) % alpha.length);
+  }
+  // Rellena si quedó corta
+  while (s.length < longitud) {
+    s += alpha.charAt(Math.floor(Math.random() * alpha.length));
+  }
+  return s;
+}
+
+/**
+ * Genera un PIN numérico de 4 dígitos.
+ */
+function generarPIN(longitud) {
+  longitud = longitud || 4;
+  let s = '';
+  for (let i = 0; i < longitud; i++) {
+    s += Math.floor(Math.random() * 10);
+  }
+  // Garantiza que no empiece con 0 (más difícil de leer mal)
+  if (s.charAt(0) === '0') s = '1' + s.substring(1);
+  return s;
+}
+
+/**
+ * Devuelve el secreto HMAC guardado en Script Properties.
+ * Si no existe, genera uno nuevo automáticamente.
+ */
+function getSecretHMAC_() {
+  const props = PropertiesService.getScriptProperties();
+  let secret = props.getProperty('WUNDT_SECRET_HMAC');
+  if (!secret) {
+    secret = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    props.setProperty('WUNDT_SECRET_HMAC', secret);
+    Logger.log('WUNDT_SECRET_HMAC generado automáticamente. Guárdalo en un lugar seguro.');
+  }
+  return secret;
+}
+
+/**
+ * Genera un token de sesión con formato: <base64(subject|expiraIso)>.<hex(HMAC)>
+ * Esto permite que el backend valida todo (sujeto + expiración) sin necesidad
+ * de un store de sesiones, porque el HMAC cubre el sujeto y la expiración.
+ *
+ *   segment1 = base64url(subject + '|' + expiraIso)
+ *   segment2 = hex(HMAC-SHA256(segment1, secret))
+ *   token = segment1 + '.' + segment2
+ *
+ * Devuelve {token, subject, expiraEn (ISO)} con expiración de 12h.
+ */
+function generarSesion(subject) {
+  const ahora = new Date();
+  const expira = new Date(ahora.getTime() + 12 * 60 * 60 * 1000);
+  const expiraIso = expira.toISOString();
+  const payload = subject + '|' + expiraIso;
+  const segment1 = Utilities.base64EncodeWebSafe(payload).replace(/=+$/, '');
+  const hmac = Utilities.computeHmacSha256Signature(segment1, getSecretHMAC_());
+  const segment2 = hmac.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+  return { token: segment1 + '.' + segment2, subject: subject, expiraEn: expiraIso };
+}
+
+/**
+ * Valida un token de sesión. Devuelve {ok, subject, expiraEn} o {ok:false, razon}.
+ *
+ * Chequea:
+ *  1) Estructura (dos segmentos separados por '.', primero base64url, segundo hex 64).
+ *  2) Firma HMAC.
+ *  3) Expiración (no mayor a `ahora`).
+ *  4) Si subjectEsperado viene, lo compara contra el subject del token.
+ */
+function validarSesion(token, subjectEsperado) {
+  if (!token || typeof token !== 'string') return { ok: false, razon: 'Falta token' };
+
+  const partes = token.split('.');
+  if (partes.length !== 2) return { ok: false, razon: 'Formato de token inválido' };
+
+  const [segment1, segment2] = partes;
+  if (!/^[0-9a-f]{64}$/i.test(segment2)) return { ok: false, razon: 'Firma con formato inválido' };
+
+  // Verifica firma
+  const esperado = Utilities.computeHmacSha256Signature(segment1, getSecretHMAC_());
+  const esperadoHex = esperado.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+  if (esperadoHex.toLowerCase() !== segment2.toLowerCase()) {
+    return { ok: false, razon: 'Firma inválida' };
+  }
+
+  // Decodifica payload
+  let payloadStr;
+  try {
+    payloadStr = Utilities.newBlob(Utilities.base64DecodeWebSafe(segment1)).getDataAsString();
+  } catch (e) {
+    return { ok: false, razon: 'No se pudo decodificar el payload' };
+  }
+  const idx = payloadStr.lastIndexOf('|');
+  if (idx < 0) return { ok: false, razon: 'Payload mal formado' };
+  const subject = payloadStr.substring(0, idx);
+  const expiraIso = payloadStr.substring(idx + 1);
+
+  const expira = new Date(expiraIso);
+  if (isNaN(expira.getTime())) return { ok: false, razon: 'Expiración inválida' };
+  if (new Date() > expira) return { ok: false, razon: 'Sesión expirada' };
+
+  if (subjectEsperado && subject !== subjectEsperado) {
+    return { ok: false, razon: 'Subject no coincide' };
+  }
+
+  return { ok: true, subject: subject, expiraEn: expiraIso };
+}
+
+/**
+ * Resetea el password de UN maestro con un valor conocido que tú defines.
+ * Útil cuando olvidaste la contraseña y necesitas volver a entrar.
+ *
+ * Ejecutar manualmente: resetPasswordMaestro("M03", "M03Wundt2026")
+ *
+ * ADVERTENCIA: este cambio sobreescribe el PasswordHash y el Salt existentes.
+ */
+function resetPasswordMaestro(maestroId, nuevoPassword) {
+  if (!maestroId || !nuevoPassword) {
+    throw new Error('resetPasswordMaestro: maestroId y nuevoPassword requeridos');
+  }
+  const sh = asegurarHoja(SHEETS.MAESTROS_AUTH);
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0] || '').trim() === String(maestroId).trim()) {
+      const nuevoSalt = generarSalt();
+      const nuevoHash = hashCredencial(nuevoPassword, nuevoSalt);
+      sh.getRange(i + 1, 2).setValue(nuevoHash);
+      sh.getRange(i + 1, 3).setValue(nuevoSalt);
+      Logger.log('Password de ' + maestroId + ' actualizado a: ' + nuevoPassword);
+      return { ok: true, maestroId: maestroId, nuevoPassword: nuevoPassword };
+    }
+  }
+  throw new Error('resetPasswordMaestro: maestroId "' + maestroId + '" no existe en MAESTROS_AUTH');
+}
+
+/**
+ * Crea una fila en MAESTROS_AUTH para los M01-M09 si no existe.
+ * Genera passwords temporales, los imprime en Logger, los devuelve como mapa.
+ *
+ * Ejecutar manualmente: altaMaestrosSeed()
+ */
+function altaMaestrosSeed() {
+  const cfg = leerConfig();
+  const lista = cfg['Maestro'] || [];
+  const sh = asegurarHoja(SHEETS.MAESTROS_AUTH);
+  const { filas } = leerFilas('MAESTROS_AUTH');
+  const existentes = new Set(filas.map(r => String(r.MaestroID || '').trim()));
+
+  const credenciales = {};
+  lista.forEach(m => {
+    if (existentes.has(m.valorId)) {
+      credenciales[m.valorId] = '(ya existe)';
+      return;
+    }
+    const pwd = generarPasswordTemporal(8);
+    const salt = generarSalt();
+    sh.appendRow([m.valorId, hashCredencial(pwd, salt), salt, true, '']);
+    credenciales[m.valorId] = pwd;
+  });
+  Logger.log('Credenciales generadas: ' + JSON.stringify(credenciales));
+  return credenciales;
+}
+
+/**
+ * Da de alta el acceso de un padre para un alumnoId.
+ * Genera PIN aleatorio, lo guarda hasheado, devuelve el PIN en plano.
+ *
+ * Ejecutar manualmente: altaAccesoPadre_(alumnoId, tutorNombre)
+ */
+function altaAccesoPadre_(alumnoId, tutorNombre) {
+  if (!alumnoId) throw new Error('altaAccesoPadre: alumnoId requerido');
+  // Verifica que el alumno exista en ALUMNOS
+  const alumnos = leerFilas('ALUMNOS').filas;
+  const alumno = alumnos.find(a => String(a.AlumnoID || '').trim() === String(alumnoId).trim());
+  if (!alumno) throw new Error('altaAccesoPadre: alumnoId "' + alumnoId + '" no existe en ALUMNOS');
+
+  const sh = asegurarHoja(SHEETS.ACCESOS_PADRES);
+  const pin = generarPIN(4);
+  const salt = generarSalt();
+  sh.appendRow([alumnoId, hashCredencial(pin, salt), salt, tutorNombre || '', '', '', true, new Date()]);
+  return { ok: true, alumnoId: alumnoId, pin: pin, mensaje: 'PIN generado. Comunícalo al tutor por canal seguro.' };
+}
+
+/**
+ * Seed completo: crea maestros fijos (M01-M09), genéricos (G01-G05),
+ * admin (ADM) y dirección (DIR). Si ya existen, los respeta.
+ * Passwords deterministas fáciles de recordar.
+ */
+function seedMaestrosCompleto() {
+  const passwordsFijos = {
+    'M01': 'M01Wundt2026', 'M02': 'M02Wundt2026', 'M03': 'M03Wundt2026',
+    'M04': 'M04Wundt2026', 'M05': 'M05Wundt2026', 'M06': 'M06Wundt2026',
+    'M07': 'M07Wundt2026', 'M08': 'M08Wundt2026', 'M09': 'M09Wundt2026'
+  };
+  const passwordsGenericos = {
+    'G01': 'G01Reserva2026', 'G02': 'G02Reserva2026', 'G03': 'G03Reserva2026',
+    'G04': 'G04Reserva2026', 'G05': 'G05Reserva2026'
+  };
+  const passwordsControl = {
+    'ADM': 'ADMadmin2026',
+    'DIR': 'DIRdireccion2026'
+  };
+
+  const todos = {};
+  Object.assign(todos, passwordsFijos, passwordsGenericos, passwordsControl);
+
+  const sh = asegurarHoja(SHEETS.MAESTROS_AUTH);
+  const { filas } = leerFilas('MAESTROS_AUTH');
+  const existentes = new Set(filas.map(r => String(r.MaestroID || '').trim()));
+
+  const resultado = {};
+  Object.keys(todos).forEach(maestroId => {
+    const pwd = todos[maestroId];
+    if (existentes.has(maestroId)) {
+      resultado[maestroId] = { password: pwd, accion: 'ya existe (no se sobreescribe)' };
+      return;
+    }
+    const salt = generarSalt();
+    sh.appendRow([maestroId, hashCredencial(pwd, salt), salt, true, '']);
+    resultado[maestroId] = { password: pwd, accion: 'creado' };
+  });
+
+  Logger.log('=== SEED MAESTROS ===');
+  Logger.log(JSON.stringify(resultado, null, 2));
+  return resultado;
+}
+
+/**
+ * Crea 15 alumnos de reserva (1 extra por grado + 6 extras donde hay más movimiento)
+ * y les genera PIN de padre automáticamente.
+ */
+function seedAlumnosReserva() {
+  const shAlumnos = getHoja('ALUMNOS');
+  const data = shAlumnos.getDataRange().getValues();
+  const existentes = new Set();
+  for (let i = 1; i < data.length; i++) {
+    existentes.add(String(data[i][0] || '').trim());
+  }
+
+  const reservas = [
+    { prefijo: '1.',   grado: 'Primero',         grupo: 'Unico',  maestroId: 'M01' },
+    { prefijo: '2.',   grado: 'Segundo',         grupo: 'Unico',  maestroId: 'M02' },
+    { prefijo: '3.',   grado: 'Tercero',         grupo: 'Unico',  maestroId: 'M03' },
+    { prefijo: '4.',   grado: 'Cuarto',          grupo: 'Unico',  maestroId: 'M04' },
+    { prefijo: '5.',   grado: 'Quinto',          grupo: 'Unico',  maestroId: 'M05' },
+    { prefijo: '6.',   grado: 'Sexto',           grupo: 'Unico',  maestroId: 'M06' },
+    { prefijo: '1.s',  grado: '1rosecundaria',   grupo: 'Unico',  maestroId: 'M07' },
+    { prefijo: '2.s',  grado: '2dosecundaria',   grupo: 'Unico',  maestroId: 'M08' },
+    { prefijo: '3.s',  grado: '3ersecudaria',    grupo: 'Unico',  maestroId: 'M09' },
+    { prefijo: '1.',   grado: 'Primero',         grupo: 'Unico',  maestroId: 'M01' },
+    { prefijo: '2.',   grado: 'Segundo',         grupo: 'Unico',  maestroId: 'M02' },
+    { prefijo: '3.',   grado: 'Tercero',         grupo: 'Unico',  maestroId: 'M03' },
+    { prefijo: '1.s',  grado: '1rosecundaria',   grupo: 'Unico',  maestroId: 'M07' },
+    { prefijo: '2.s',  grado: '2dosecundaria',   grupo: 'Unico',  maestroId: 'M08' },
+    { prefijo: '3.s',  grado: '3ersecudaria',    grupo: 'Unico',  maestroId: 'M09' }
+  ];
+
+  const alumnosCreados = [];
+  const pinGenerado = {};
+
+  const siguientePorPrefijo = {};
+  Object.keys(reservas.reduce((acc, r) => { acc[r.prefijo] = true; return acc; }, {})).forEach(pref => {
+    siguientePorPrefijo[pref] = 1;
+  });
+  existentes.forEach(id => {
+    Object.keys(siguientePorPrefijo).forEach(pref => {
+      if (id.startsWith(pref)) {
+        const numStr = id.substring(pref.length);
+        const num = parseInt(numStr, 10);
+        if (!isNaN(num)) {
+          siguientePorPrefijo[pref] = Math.max(siguientePorPrefijo[pref], num + 1);
+        }
+      }
+    });
+  });
+
+  reservas.forEach(r => {
+    const nuevoId = r.prefijo + siguientePorPrefijo[r.prefijo];
+    siguientePorPrefijo[r.prefijo]++;
+
+    if (existentes.has(nuevoId)) return;
+
+    shAlumnos.appendRow([nuevoId, 'Por definir', r.grupo, r.grado, r.maestroId]);
+    existentes.add(nuevoId);
+    alumnosCreados.push({ alumnoId: nuevoId, grado: r.grado, maestroId: r.maestroId });
+
+    const pinInfo = altaAccesoPadre_(nuevoId, '');
+    pinGenerado[nuevoId] = pinInfo.pin;
+  });
+
+  Logger.log('=== ALUMNOS RESERVA CREADOS ===');
+  Logger.log('Total: ' + alumnosCreados.length);
+  Logger.log('IDs: ' + alumnosCreados.map(a => a.alumnoId).join(', '));
+  Logger.log('=== PINs DE PADRES ===');
+  Logger.log(JSON.stringify(pinGenerado, null, 2));
+  return { alumnos: alumnosCreados, pines: pinGenerado };
+}
