@@ -1,0 +1,158 @@
+BITÁCORA 2026-08-26 — Sesión de cierre: 3 portales públicos en GitHub Pages
+=================================================================================
+
+FECHA: 2026-08-26 (continuación de sesión iniciada 2026-08-25)
+PROYECTO: Instituto Wilhelm Wundt SC — Plataforma de Evaluación Mensual
+RESPONSABLE: Marco (Marcorepositorioprueba)
+
+=================================================================================
+RESUMEN EJECUTIVO
+=================================================================================
+
+Se cierra la fase de trabajo local y se completa la primera subida exitosa a
+GitHub. Los 3 portales (Docente, Padres, Admin/Director) quedan PÚBLICOS y
+accesibles desde cualquier dispositivo con los links de GitHub Pages.
+
+=================================================================================
+LINKS PÚBLICOS (GitHub Pages — HTTPS, públicos)
+=================================================================================
+
+REPOSITORIO:
+  https://github.com/Marcorepositorioprueba/IWWevaluaciones
+
+PORTAL DOCENTE:
+  https://marcorepositorioprueba.github.io/IWWevaluaciones/frontend/docente/
+
+PORTAL PADRES:
+  https://marcorepositorioprueba.github.io/IWWevaluaciones/frontend/padres/
+
+PORTAL ADMIN/DIRECTOR:
+  https://marcorepositorioprueba.github.io/IWWevaluaciones/frontend/admin/
+
+
+=================================================================================
+ENTREGABLES DE LA SESIÓN
+=================================================================================
+
+[P30] Fecha ilegible en portal padres                — CERRADO
+[P31] Validación responsividad celular               — CERRADO
+[P34] Fix %Capturado sobre预留                       — CERRADO
+[P35] Dictado por voz en Observaciones (numérico)    — CERRADO
+[P36] Fix error aborted en voz.js                    — CERRADO
+[P37] UI state consistente entre botones voz         — CERRADO
+[P38] Avatar genérico portal padres (persons.jpg)    — CERRADO
+[P38b] Avatar school.jpg real en tarjetas alumno     — CERRADO
+[P39] Mostrar pesos del Índice en portal docente     — CERRADO
+[P40] Diseño bonito Exportar/Imprimir portal padres  — CERRADO
+
+[P32] PWA completo                                  — CERRADO
+       - manifest.json (theme-color #7a1d2c)
+       - sw.js (cache-first assets, network-first HTML)
+       - icon-192.png + icon-512.png (maskable)
+       - Registro SW en los 3 portales
+
+[P33] Portal Admin/Director (nuevo)                  — CERRADO
+       Backend:
+       - lib_auth.gs: helper esAdmin_()
+       - lib_sheets.gs: leerCoberturaPorGrupo_ + leerAlumnosGrupo_
+       - Code.gs: 2 actions nuevas (get_cobertura_por_grupo, get_alumnos_grupo)
+       - lib_validaciones.gs: 2 validadores nuevos
+       - Docs: api_contrato.md actualizado
+       Frontend:
+       - frontend/admin/index.html (4 KPIs, tabla 12 grupos, drill-down)
+       - frontend/admin/assets/js/api.js (authMaestro + 2 endpoints nuevos)
+       - frontend/admin/assets/js/ui.js (render + drill-down)
+       Fixes:
+       - P33.7: ReferenceError ADM/DIR not defined
+       - P33.8: Portada Ken-Burns cubría el dashboard
+
+[P41] Open Graph + Twitter Card                      — CERRADO
+       - meta og:* y twitter:* en los 3 index.html
+       - og:image = willogo.jpg compartido
+
+[P42] Git init + 3 commits + push                    — CERRADO
+       - Backup pre_git creado (WilhelmWundtv2_2026-08-26_pre_git)
+       - .gitignore con filtros para backups, secrets, legacy
+       - git init -b main
+       - 3 commits con mensajes claros
+       - git push a Marcorepositorioprueba/IWWevaluaciones (público)
+       - GitHub Pages activado
+
+
+=================================================================================
+ARQUITECTURA FINAL
+=================================================================================
+
+Frontend (este repo, GitHub Pages):
+  - HTML/JS vanilla + Tailwind CDN
+  - Sin build step, sin npm
+  - 3 portales independientes que comparten /compartido/ (CSS, img, manifest, sw)
+
+Backend (Google Apps Script, NO está en git):
+  - Code.gs: router doPost con 11 actions
+  - lib_sheets.gs: lecturas robustas, upserts, cobertura
+  - lib_auth.gs: hash + salt + HMAC
+  - lib_validaciones.gs: schema whitelist
+  - Deploy: Web App en script.google.com
+  - URL fija (no requiere git para actualizarse)
+
+Base de datos (Google Sheets):
+  - CONFIG, ALUMNOS, EVALUACIONES, MAESTROS_AUTH, ACCESOS_PADRES, BACKUP_LOGS
+
+
+=================================================================================
+FLUJO DE TRABAJO PARA FUTUROS CAMBIOS
+=================================================================================
+
+1. Marco me dice el cambio (en español, como siempre).
+2. Yo edito archivos localmente en WilhelmWundtv2_backup_PreFase2.
+3. Yo corro:
+     git add .
+     git commit -m "descripción clara"
+     git push
+4. Marco espera 1-2 minutos y refresca los 3 portales en su navegador/celular.
+5. Si algo falla, me dice y vuelvo al entorno local para arreglar.
+
+NUNCA editar archivos en las carpetas de respaldo (son inmutables).
+NUNCA tocar la rama main desde el navegador de GitHub (siempre desde local).
+
+
+=================================================================================
+SEGURIDAD Y BACKUPS
+=================================================================================
+
+- .gitignore filtra: *_backup_*/, *_pre_*/, *_imprimir_pdf/, *_2026-08-25_*/,
+  *_2026-08-26_*/, *_FASE2*/, *.pdf, .env, secrets.gs, wundt_secret.gs,
+  backend/*.gs.txt (legacy).
+
+- Credenciales GitHub guardadas en Windows Credential Manager.
+  git push funciona sin pedir PAT.
+
+- Backup pre_git: WilhelmWundtv2_2026-08-26_pre_git (estado antes del init).
+  Solo consultar — no modificar.
+
+- Backend Secrets (WUNDT_SECRET_HMAC, WUNDT_ADMIN_TOKEN) viven en Apps Script
+  PropertiesService — NUNCA en este repo.
+
+
+=================================================================================
+PENDIENTES / SIGUIENTE FASE
+=================================================================================
+
+[P34-ext] Manual "garbanzos de a libra" expandido en docs/INSTRUCCIONES.md
+[P44] Exportar dashboard admin a PDF (reporte mensual para dirección)
+[P45] Filtros adicionales en tabla admin (por maestro, por grado)
+[P46] Multi-ciclo escolar (hoy hardcodeado desde CONFIG)
+[P47] Cambio de contraseña obligatorio en primer login del maestro
+
+=================================================================================
+CONTACTO
+=================================================================================
+
+Marco León · leonmarcoantonio@yahoo.com.mx
+Instituto Wilhelm Wundt SC
+GitHub: Marcorepositorioprueba
+
+=================================================================================
+FIN DE BITÁCORA
+=================================================================================
