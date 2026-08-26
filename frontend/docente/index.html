@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instituto Wilhelm Wundt — Captura Docente</title>
+
+  <!-- P41 (2026-08-26): Open Graph + Twitter Card para preview al compartir el link -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Wundt · Captura Docente">
+  <meta property="og:description" content="Plataforma de evaluación mensual para docentes del Instituto Wilhelm Wundt. Captura calificaciones, asistencia, tareas y competencias de tu grupo.">
+  <meta property="og:image" content="../compartido/assets/img/willogo.jpg">
+  <meta property="og:site_name" content="Instituto Wilhelm Wundt SC">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Wundt · Captura Docente">
+  <meta name="twitter:description" content="Captura mensual de evaluación integral para docentes.">
+  <meta name="twitter:image" content="../compartido/assets/img/willogo.jpg">
+
+  <!-- P32 (2026-08-26): PWA — manifest, theme-color, ícono Apple, service worker -->
+  <link rel="manifest" href="../compartido/manifest.json">
+  <meta name="theme-color" content="#7a1d2c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Wundt">
+  <link rel="apple-touch-icon" href="../compartido/assets/img/icon-192.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../compartido/assets/css/app.css?v=9">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <style>
+    /* === Fondo a pantalla completa + Ken Burns + overlay en #pantallaPortada === */
+    #pantallaPortada {
+      background: url("../compartido/assets/img/ChatGPT%20Image%205%20ago%202026,%2017_35_15.png") center / cover no-repeat !important;
+      background-size: cover !important;
+      min-height: 100vh;
+      position: fixed;
+      z-index: 100;
+    }
+    #pantallaPortada::before {
+      content: "";
+      position: absolute; inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      pointer-events: none;
+      z-index: 1;
+      animation: portadaZoom 22s ease-in-out infinite alternate;
+      transform-origin: 50% 50%;
+    }
+    @keyframes portadaZoom {
+      0%   { transform: scale(1.0); }
+      100% { transform: scale(1.10); }
+    }
+    #pantallaPortada > * { position: relative; z-index: 2; }
+
+    /* === Rayo de luz continuo atravesando la caja de cristal de la portada === */
+    .glass-container { position: relative; overflow: hidden; }
+    .glass-container::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -120%;
+      width: 60%; height: 100%;
+      background: linear-gradient(
+        to right,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.28) 50%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      transform: skewX(-22deg);
+      animation: portadaSweep 4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes portadaSweep {
+      0%   { left: -120%; }
+      60%  { left: 120%; }
+      100% { left: 120%; }
+    }
+
+    /* Logo circular blanco + textos claros sobre el fondo oscuro */
+    #pantallaPortada .glass-container img {
+      width: 96px; height: 96px;
+      border-radius: 50%;
+      background: #ffffff;
+      padding: 12px;
+      box-shadow:
+        0 0 0 4px rgba(255,255,255,0.15),
+        0 18px 50px -10px rgba(0,0,0,0.45);
+    }
+    #pantallaPortada .glass-container h1 { color: #ffffff; text-shadow: 0 2px 16px rgba(0,0,0,0.5); }
+    #pantallaPortada .glass-container p  { color: rgba(255,255,255,0.82) !important; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ============ PORTADA (solo fondo de imagen) ============ -->
+  <div id="pantallaPortada" class="fixed inset-0 z-[100] overflow-hidden">
+    <!-- Esta capa solo conserva la imagen de fondo. El login va encima (z-110). -->
+  </div>
+
+  <!-- ============ LOGIN ============ -->
+  <div id="loginArea" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
+    <div class="bg-white/10 backdrop-blur-xl p-6 md:p-8 rounded-3xl shadow-xl max-w-md w-full border border-white/25 relative z-10 overflow-hidden">
+      <img src="../compartido/assets/img/will_transparent.png"
+           alt="Wundt"
+           class="h-20 w-20 mx-auto mb-3 object-contain float-anim"
+           onerror="this.style.display='none'">
+      <h2 class="text-xl font-bold text-center mb-1 text-white">Acceso Docente</h2>
+      <p class="text-sm text-white/80 text-center mb-6">Ingresa con tu ID y contraseña</p>
+      <label class="block mb-3">
+        <span class="text-xs font-bold text-white/90 uppercase">ID Maestro</span>
+        <input type="text" id="maestroId" placeholder="M01" autocomplete="username"
+               class="w-full p-3 mt-1 border border-white/30 bg-white/15 text-white placeholder-white/60 rounded-xl outline-none focus:ring-2 focus:ring-white/50">
+      </label>
+      <label class="block mb-4">
+        <span class="text-xs font-bold text-white/90 uppercase">Contraseña</span>
+        <input type="password" id="maestroPassword" placeholder="••••••••" autocomplete="current-password"
+               class="w-full p-3 mt-1 border border-white/30 bg-white/15 text-white placeholder-white/60 rounded-xl outline-none focus:ring-2 focus:ring-white/50">
+      </label>
+      <div id="loginError" class="text-red-300 text-sm mb-3 font-medium"></div>
+      <button id="btnLogin" onclick="handleLogin()"
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition shadow-md">
+        Entrar
+      </button>
+      <p class="text-xs text-white/70 text-center mt-4">
+        ¿Problemas para entrar? Contacta al administrador.
+      </p>
+    </div>
+  </div>
+
+  <!-- ============ APP PRINCIPAL ============ -->
+  <div id="evaluacionArea" class="hidden max-w-6xl mx-auto p-4 md:p-8">
+
+    <!-- Header formal -->
+    <header class="app-header">
+      <div class="flex items-center gap-3 min-w-0">
+        <img src="../compartido/assets/img/will_transparent.png"
+             alt="Logo Wundt"
+             class="app-header-logo float-anim"
+             onerror="this.style.display='none'">
+        <div class="app-header-titles">
+          <h1>Instituto Wilhelm Wundt</h1>
+          <p>Captura de Evaluación Mensual</p>
+        </div>
+      </div>
+      <div id="maestroPerfil" class="hidden items-center gap-3 flex-shrink-0">
+        <div class="text-right hidden md:block">
+          <p id="maestroNombre" class="font-bold text-slate-800 text-sm"></p>
+          <span id="maestroIdLabel" class="text-xs text-slate-500"></span>
+        </div>
+        <span id="ultimoAccesoBadge" class="ultimo-acceso" style="display:none;"></span>
+        <button onclick="logout()" class="text-slate-400 hover:text-red-600 text-sm font-bold underline transition whitespace-nowrap">
+          Salir
+        </button>
+      </div>
+    </header>
+
+    <!-- Banner informativo de mes de captura -->
+    <div id="bannerMesCaptura" class="hidden mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 p-4 rounded-2xl shadow-sm">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+          <p class="text-sm md:text-base font-bold text-blue-900">
+            📅 Mes de captura actual: <span id="bannerMesActual"></span>
+          </p>
+          <p class="text-xs md:text-sm text-blue-700 mt-1">
+            💡 Sugerencia: captura máxima al finalizar el mes
+          </p>
+        </div>
+        <p class="text-xs text-blue-600 italic">
+          El campo Mes es automático pero puedes ajustarlo si necesitas capturar meses anteriores.
+        </p>
+      </div>
+    </div>
+
+    <!-- Selector de mes + cargar -->
+    <section class="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 mb-6">
+      <div class="flex flex-col md:flex-row gap-3 items-stretch md:items-end justify-between">
+        <div class="flex-1">
+          <label class="text-xs font-bold text-slate-600 uppercase block mb-1">Mes a capturar</label>
+          <select id="mesSeleccion" class="w-full md:w-64 p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white"></select>
+          <p id="mesAyuda" class="text-xs text-slate-500 mt-1">Mes actual detectado. Puedes cambiarlo para editar uno anterior.</p>
+        </div>
+        <button id="btnCargarGrupo" onclick="cargarGrupo()"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition shadow-md whitespace-nowrap">
+          Cargar Grupo
+        </button>
+      </div>
+    </section>
+
+    <!-- Panel de analítica (oculto hasta cargar) -->
+    <section id="analyticsArea" class="hidden">
+      <div class="analytics-card mb-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="font-bold text-slate-700">Analítica del grupo</h2>
+          <span class="text-xs text-slate-500" id="analyticsMesLabel"></span>
+        </div>
+        <div class="kpi-grid mb-4">
+          <div class="kpi accent-blue">
+            <span class="kpi-label">% Capturado</span>
+            <span class="kpi-value" id="kpiPorcentaje">—</span>
+            <span class="kpi-extra" id="kpiCapturadosDetalle">0 de 0 alumnos</span>
+          </div>
+          <div class="kpi accent-green">
+            <span class="kpi-label">Índice Promedio</span>
+            <span class="kpi-value" id="kpiIndice">—</span>
+            <span class="kpi-extra" id="kpiIndiceExtra">sobre 10</span>
+          </div>
+          <div class="kpi accent-yellow">
+            <span class="kpi-label">En desarrollo</span>
+            <span class="kpi-value" id="kpiAmarillo">—</span>
+            <span class="kpi-extra">alumnos en amarillo</span>
+          </div>
+          <div class="kpi accent-red">
+            <span class="kpi-label">Necesitan apoyo</span>
+            <span class="kpi-value" id="kpiRojo">—</span>
+            <span class="kpi-extra">alumnos en rojo</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div>
+            <h3 class="text-xs font-bold text-slate-600 uppercase mb-2">Distribución por semáforo</h3>
+            <div class="chart-container"><canvas id="chartSemaforo"></canvas></div>
+          </div>
+          <div>
+            <h3 class="text-xs font-bold text-slate-600 uppercase mb-2">Evolución del índice (últimos meses)</h3>
+            <div class="chart-container"><canvas id="chartEvolucion"></canvas></div>
+          </div>
+        </div>
+        <div id="analyticsEmpty" class="hidden text-center py-8 text-slate-500">
+          <div class="text-4xl mb-2">📊</div>
+          <p class="font-bold">Aún no hay datos para mostrar.</p>
+          <p class="text-sm">Captura al primer grupo para ver la analítica.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tabla de alumnos -->
+    <section id="tablaArea" class="hidden">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="font-bold text-slate-700">Alumnos del grupo</h2>
+        <div class="flex items-center gap-3">
+          <span id="contadorListos" class="text-sm text-slate-500">0 / 0 listos</span>
+          <button id="btnImprimirGrupo" onclick="solicitarImprimir()"
+                  class="btn-ctx ghost" title="Imprimir o guardar como PDF">
+            🖨️ Imprimir / PDF
+          </button>
+        </div>
+      </div>
+      <div id="listaAlumnos" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"></div>
+
+      <button id="btnGuardarGrupo" onclick="solicitarGuardar()"
+              class="hidden mt-6 w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-2xl font-bold text-lg transition shadow-md">
+        Guardar Evaluación Grupal
+      </button>
+    </section>
+
+  </div>
+
+  <!-- ============ REPORTE IMPRIMIBLE (solo visible al imprimir) ============ -->
+  <article id="reporteImprimible" class="print-only"></article>
+
+  <!-- ============ PANEL DE EDICIÓN (bottom sheet en mobile, modal en desktop) ============ -->
+  <div id="panelEditar" class="hidden fixed inset-0 z-[160]">
+    <div class="absolute inset-0 bg-slate-900 bg-opacity-50" onclick="cerrarPanel()"></div>
+    <div class="relative panel-backdrop">
+      <div class="panel-card">
+        <div class="panel-grabber"></div>
+        <div id="contenidoPanel"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL DE CONFIRMACIÓN ============ -->
+  <div id="modalConfirmacion" class="hidden modal-backdrop">
+    <div class="modal-card">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="bg-blue-100 text-blue-600 rounded-full p-2 text-2xl">💾</div>
+        <h3 class="text-lg font-bold text-slate-800">Confirmar guardado</h3>
+      </div>
+      <div id="modalConfirmacionBody" class="text-slate-700 leading-relaxed text-sm"></div>
+      <div class="flex gap-2 mt-6">
+        <button onclick="cerrarModalConfirmacion()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold transition">
+          Cancelar
+        </button>
+        <button id="btnConfirmarGuardar" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold transition shadow-md">
+          Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL DE ERRORES ============ -->
+  <div id="modalErrores" class="hidden modal-backdrop">
+    <div class="modal-card">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold text-slate-800">Revisa los datos</h3>
+        <button onclick="cerrarModalErrores()" class="text-slate-400 hover:text-slate-800 text-2xl leading-none">×</button>
+      </div>
+      <div id="modalErroresBody" class="max-h-96 overflow-y-auto"></div>
+      <button onclick="cerrarModalErrores()" class="w-full mt-4 bg-blue-600 text-white py-2 rounded-xl font-bold">
+        Entendido
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="assets/js/ui.js?v=13"></script>
+  <script>
+    // P32 (2026-08-26): registro del Service Worker para PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../compartido/sw.js')
+          .then(reg => console.log('[PWA] Service Worker registrado:', reg.scope))
+          .catch(err => console.warn('[PWA] No se pudo registrar el SW:', err));
+      });
+    }
+  </script>
+  <script>
+    // Versión de despliegue para cache-bust. Incrementar en cada cambio.
+    // 4.7 = botón Imprimir/PDF en header de tabla de alumnos (frontend puro)
+    // 4.10 = fix SyntaxError en voz.js (generación de dictado)
+    window.WUNDT_VERSION = '4.10';
+  </script>
+</body>
+</html>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instituto Wilhelm Wundt — Portal de Dirección</title>
+
+  <!-- P41 (2026-08-26): Open Graph + Twitter Card para preview al compartir el link -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Wundt · Dashboard de Dirección">
+  <meta property="og:description" content="Dashboard global del ciclo escolar. Estado de captura y semáforo por grado y grupo. Solo para ADM/DIR. Instituto Wilhelm Wundt SC.">
+  <meta property="og:image" content="../compartido/assets/img/willogo.jpg">
+  <meta property="og:site_name" content="Instituto Wilhelm Wundt SC">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Wundt · Dashboard de Dirección">
+  <meta name="twitter:description" content="Estado global del ciclo escolar por grado y grupo.">
+  <meta name="twitter:image" content="../compartido/assets/img/willogo.jpg">
+
+  <!-- P32 (2026-08-26): PWA — manifest, theme-color, ícono Apple, service worker -->
+  <link rel="manifest" href="../compartido/manifest.json">
+  <meta name="theme-color" content="#7a1d2c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Wundt">
+  <link rel="apple-touch-icon" href="../compartido/assets/img/icon-192.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../compartido/assets/css/app.css?v=9">
+  <style>
+    /* === Fondo a pantalla completa + Ken Burns + overlay en #pantallaPortada === */
+    #pantallaPortada {
+      background: url("../compartido/assets/img/ChatGPT%20Image%205%20ago%202026,%2017_35_15.png") center / cover no-repeat !important;
+      background-size: cover !important;
+      min-height: 100vh;
+      position: fixed;
+      z-index: 100;
+    }
+    #pantallaPortada::before {
+      content: "";
+      position: absolute; inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      pointer-events: none;
+      z-index: 1;
+      animation: portadaZoom 22s ease-in-out infinite alternate;
+      transform-origin: 50% 50%;
+    }
+    @keyframes portadaZoom {
+      0%   { transform: scale(1.0); }
+      100% { transform: scale(1.10); }
+    }
+    #pantallaPortada > * { position: relative; z-index: 2; }
+
+    /* === Rayo de luz continuo atravesando la caja de cristal de la portada === */
+    .glass-container { position: relative; overflow: hidden; }
+    .glass-container::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -120%;
+      width: 60%; height: 100%;
+      background: linear-gradient(
+        to right,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.28) 50%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      transform: skewX(-22deg);
+      animation: portadaSweep 4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes portadaSweep {
+      0%   { left: -120%; }
+      60%  { left: 120%; }
+      100% { left: 120%; }
+    }
+
+    /* Logo circular blanco + textos claros sobre el fondo oscuro */
+    #pantallaPortada .glass-container img {
+      width: 96px; height: 96px;
+      border-radius: 50%;
+      background: #ffffff;
+      padding: 12px;
+      box-shadow:
+        0 0 0 4px rgba(255,255,255,0.15),
+        0 18px 50px -10px rgba(0,0,0,0.45);
+    }
+    #pantallaPortada .glass-container h1 { color: #ffffff; text-shadow: 0 2px 16px rgba(0,0,0,0.5); }
+    #pantallaPortada .glass-container p  { color: rgba(255,255,255,0.82) !important; }
+
+    /* === Mini barra de progreso para % Captura === */
+    .mini-progress {
+      position: relative;
+      height: 18px;
+      width: 100%;
+      background: #f4f4f5;
+      border-radius: 9px;
+      overflow: hidden;
+      border: 1px solid #e4e4e7;
+    }
+    .mini-progress-bar {
+      position: absolute; top: 0; left: 0; bottom: 0;
+      transition: width .6s cubic-bezier(.4,0,.2,1);
+    }
+    .mini-progress-bar.bajo    { background: linear-gradient(90deg,#fca5a5,#ef4444); }
+    .mini-progress-bar.medio   { background: linear-gradient(90deg,#fde68a,#f59e0b); }
+    .mini-progress-bar.alto    { background: linear-gradient(90deg,#86efac,#10b981); }
+    .mini-progress-bar.completo{ background: linear-gradient(90deg,#7a1d2c,#a83246); }
+    .mini-progress-label {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 800;
+      color: #18181b;
+      mix-blend-mode: normal;
+    }
+
+    /* === Chips semáforo pequeños para celdas === */
+    .semaforo-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .semaforo-cell .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .semaforo-cell.Verde   .dot { background: #10b981; }
+    .semaforo-cell.Amari.. .dot,
+    .semaforo-cell.Amarillo .dot { background: #f59e0b; }
+    .semaforo-cell.Rojo    .dot { background: #ef4444; }
+
+    /* === Avatar del alumno en drill-down === */
+    .wundt-avatar-img {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: #f4f4f5;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      border: 1.5px solid #d4d4d8;
+    }
+    .wundt-avatar-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .wundt-avatar {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg,#7a1d2c,#a83246);
+      color: #fff; font-weight: 800; font-size: 1.3rem;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* === Fila de alumno en drill-down === */
+    .admin-alumno-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #fff;
+      border: 1px solid #e4e4e7;
+      border-radius: 14px;
+      transition: box-shadow .2s ease, transform .2s ease;
+    }
+    .admin-alumno-row:hover {
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      transform: translateY(-1px);
+    }
+    .admin-alumno-row .nombre {
+      font-weight: 700;
+      color: #18181b;
+      font-size: 0.95rem;
+    }
+    .admin-alumno-row .meta {
+      font-size: 0.7rem;
+      color: #71717a;
+    }
+    .admin-alumno-row .obs-preview {
+      font-size: 0.75rem;
+      color: #52525b;
+      font-style: italic;
+      line-height: 1.3;
+      max-width: 280px;
+    }
+
+    /* === Detalle header (breadcrumb) === */
+    .detalle-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 14px 18px;
+      background: linear-gradient(135deg,#7a1d2c,#a83246);
+      color: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(122,29,44,0.18);
+    }
+    .detalle-header .volver {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      transition: background .2s ease;
+    }
+    .detalle-header .volver:hover { background: rgba(255,255,255,0.28); }
+    .detalle-header h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+    }
+    .detalle-header .sub {
+      font-size: 0.75rem;
+      opacity: 0.85;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ============ PORTADA (solo fondo de imagen) ============ -->
+  <div id="pantallaPortada" class="fixed inset-0 z-[100] overflow-hidden"></div>
+
+  <!-- ============ LOGIN ============ -->
+  <div id="loginArea" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
+    <div class="bg-white/10 backdrop-blur-xl p-6 md:p-8 rounded-3xl shadow-xl max-w-md w-full border border-white/25 relative z-10 overflow-hidden">
+      <img src="../compartido/assets/img/will_transparent.png"
+           alt="Wundt"
+           class="h-20 w-20 mx-auto mb-3 object-contain float-anim"
+           onerror="this.style.display='none'">
+      <h2 class="text-xl font-bold text-center mb-1 text-white">Acceso Dirección</h2>
+      <p class="text-sm text-white/80 text-center mb-6">Ingresa con tu ID y contraseña</p>
+      <label class="block mb-3">
+        <span class="text-xs font-bold text-white/90 uppercase">ID Dirección</span>
+        <input type="text" id="maestroId" placeholder="ADM" autocomplete="username"
+               class="w-full p-3 mt-1 border border-white/30 bg-white/15 text-white placeholder-white/60 rounded-xl outline-none focus:ring-2 focus:ring-white/50">
+      </label>
+      <label class="block mb-4">
+        <span class="text-xs font-bold text-white/90 uppercase">Contraseña</span>
+        <input type="password" id="maestroPassword" placeholder="••••••••" autocomplete="current-password"
+               class="w-full p-3 mt-1 border border-white/30 bg-white/15 text-white placeholder-white/60 rounded-xl outline-none focus:ring-2 focus:ring-white/50">
+      </label>
+      <div id="loginError" class="text-red-300 text-sm mb-3 font-medium"></div>
+      <button id="btnLogin" onclick="handleLogin()"
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition shadow-md">
+        Entrar
+      </button>
+      <p class="text-xs text-white/70 text-center mt-4">
+        ¿Problemas para entrar? Contacta al administrador del sistema.
+      </p>
+    </div>
+  </div>
+
+  <!-- ============ APP PRINCIPAL ============ -->
+  <div id="adminArea" class="hidden max-w-7xl mx-auto p-4 md:p-8">
+
+    <!-- Header formal -->
+    <header class="app-header">
+      <div class="flex items-center gap-3 min-w-0">
+        <img src="../compartido/assets/img/will_transparent.png"
+             alt="Logo Wundt"
+             class="app-header-logo float-anim"
+             onerror="this.style.display='none'">
+        <div class="app-header-titles">
+          <h1>Instituto Wilhelm Wundt</h1>
+          <p>Dashboard de Dirección</p>
+        </div>
+      </div>
+      <div id="adminPerfil" class="hidden items-center gap-3 flex-shrink-0">
+        <div class="text-right hidden md:block">
+          <p id="adminNombre" class="font-bold text-slate-800 text-sm"></p>
+          <span id="adminIdLabel" class="text-xs text-slate-500"></span>
+        </div>
+        <button onclick="logout()" class="text-slate-400 hover:text-red-600 text-sm font-bold underline transition whitespace-nowrap">
+          Salir
+        </button>
+      </div>
+    </header>
+
+    <!-- Selector de mes + cargar -->
+    <section class="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 mb-6">
+      <div class="flex flex-col md:flex-row gap-3 items-stretch md:items-end justify-between">
+        <div class="flex-1">
+          <label class="text-xs font-bold text-slate-600 uppercase block mb-1">Mes a consultar</label>
+          <select id="mesSeleccion" class="w-full md:w-64 p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white"></select>
+          <p id="mesAyuda" class="text-xs text-slate-500 mt-1">Mes actual detectado. Puedes cambiarlo para consultar meses anteriores.</p>
+        </div>
+        <button id="btnCargar" onclick="cargarCobertura()"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition shadow-md whitespace-nowrap">
+          Cargar Dashboard
+        </button>
+      </div>
+    </section>
+
+    <!-- Panel resumen -->
+    <section id="adminResumenArea" class="hidden">
+
+      <!-- KPIs globales -->
+      <div class="analytics-card mb-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="font-bold text-slate-700">Resumen del ciclo escolar</h2>
+          <span class="text-xs text-slate-500" id="resumenMesLabel"></span>
+        </div>
+        <div class="kpi-grid mb-4">
+          <div class="kpi accent-blue">
+            <span class="kpi-label">% Capturado global</span>
+            <span class="kpi-value" id="kpiPorcentaje">—</span>
+            <span class="kpi-extra" id="kpiCapturadosDetalle">0 de 0 alumnos</span>
+          </div>
+          <div class="kpi accent-green">
+            <span class="kpi-label">Índice promedio</span>
+            <span class="kpi-value" id="kpiIndice">—</span>
+            <span class="kpi-extra" id="kpiIndiceExtra">sobre 10</span>
+          </div>
+          <div class="kpi accent-yellow">
+            <span class="kpi-label">Grupos atrasados</span>
+            <span class="kpi-value" id="kpiAtrasados">—</span>
+            <span class="kpi-extra">grupos con &lt; 50%</span>
+          </div>
+          <div class="kpi accent-red">
+            <span class="kpi-label">Alumnos en rojo</span>
+            <span class="kpi-value" id="kpiRojo">—</span>
+            <span class="kpi-extra">necesitan apoyo</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla de grupos -->
+      <div class="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+        <h2 class="font-bold text-slate-700 mb-4">Estado por grupo</h2>
+        <p class="text-xs text-slate-500 mb-3">
+          Haz clic en un grupo para ver el desglose alumno por alumno.
+        </p>
+        <div class="overflow-x-auto">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Grado</th>
+                <th>Grupo</th>
+                <th>Maestro</th>
+                <th class="text-center">Modo</th>
+                <th>% Captura</th>
+                <th class="text-center">Índice</th>
+                <th class="text-center">Semáforo</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="adminTablaGrupos"></tbody>
+          </table>
+        </div>
+        <div id="adminEmpty" class="hidden text-center py-8 text-slate-500">
+          <div class="text-4xl mb-2">📊</div>
+          <p class="font-bold">Aún no hay grupos registrados.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel detalle (oculto hasta hacer clic en un grupo) -->
+    <section id="adminDetalleArea" class="hidden">
+      <div class="detalle-header">
+        <button class="volver" onclick="volverResumen()">← Volver</button>
+        <div>
+          <h2 id="detalleTitulo">—</h2>
+          <div class="sub" id="detalleSub">—</div>
+        </div>
+      </div>
+
+      <!-- KPIs del grupo -->
+      <div class="kpi-grid mb-4">
+        <div class="kpi accent-blue">
+          <span class="kpi-label">% Capturado</span>
+          <span class="kpi-value" id="detallePorcentaje">—</span>
+          <span class="kpi-extra" id="detalleCapturadosDetalle">0 de 0</span>
+        </div>
+        <div class="kpi accent-green">
+          <span class="kpi-label">Índice grupo</span>
+          <span class="kpi-value" id="detalleIndice">—</span>
+          <span class="kpi-extra">sobre 10</span>
+        </div>
+        <div class="kpi accent-yellow">
+          <span class="kpi-label">En desarrollo</span>
+          <span class="kpi-value" id="detalleAmarillo">—</span>
+          <span class="kpi-extra">🟡 alumnos</span>
+        </div>
+        <div class="kpi accent-red">
+          <span class="kpi-label">Necesitan apoyo</span>
+          <span class="kpi-value" id="detalleRojo">—</span>
+          <span class="kpi-extra">🔴 alumnos</span>
+        </div>
+      </div>
+
+      <!-- Lista de alumnos -->
+      <div class="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+        <h3 class="font-bold text-slate-700 mb-4">Alumnos del grupo</h3>
+        <div id="adminDetalleAlumnos" class="space-y-2"></div>
+        <div id="detalleEmpty" class="hidden text-center py-8 text-slate-500">
+          <p class="font-bold">No hay alumnos en este grupo.</p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script type="module" src="assets/js/ui.js?v=3"></script>
+  <script>
+    // P32 (2026-08-26): registro del Service Worker para PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../compartido/sw.js')
+          .then(reg => console.log('[PWA] Service Worker registrado:', reg.scope))
+          .catch(err => console.warn('[PWA] No se pudo registrar el SW:', err));
+      });
+    }
+  </script>
+  <script>
+    // P33 (2026-08-26): primera versión del portal admin/director.
+    // 1.1 = fix ReferenceError ADM/DIR en validación frontend
+    // 1.2 = fix portada Ken-Burns cubría el dashboard tras login
+    window.WUNDT_VERSION = '1.2';
+  </script>
+</body>
+</html>

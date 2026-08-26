@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal de Padres — Instituto Wilhelm Wundt</title>
+
+  <!-- P41 (2026-08-26): Open Graph + Twitter Card para preview al compartir el link -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Wundt · Portal de Padres">
+  <meta property="og:description" content="Consulta el avance académico mensual de tu hija o hijo: calificaciones, asistencia, tareas, competencias y mensajes del maestro. Instituto Wilhelm Wundt SC.">
+  <meta property="og:image" content="../compartido/assets/img/willogo.jpg">
+  <meta property="og:site_name" content="Instituto Wilhelm Wundt SC">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Wundt · Portal de Padres">
+  <meta name="twitter:description" content="Consulta el avance académico mensual de tu hija o hijo.">
+  <meta name="twitter:image" content="../compartido/assets/img/willogo.jpg">
+
+  <!-- P32 (2026-08-26): PWA — manifest, theme-color, ícono Apple, service worker -->
+  <link rel="manifest" href="../compartido/manifest.json">
+  <meta name="theme-color" content="#7a1d2c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Wundt">
+  <link rel="apple-touch-icon" href="../compartido/assets/img/icon-192.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../compartido/assets/css/app.css?v=9">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* === Paleta Wundt: gris / negro / guinda === */
+    :root {
+      --wundt-guinda: #7a1d2c;
+      --wundt-guinda-claro: #9c2a3d;
+      --wundt-guinda-oscuro: #5a1620;
+      --wundt-gris-1: #f4f4f5;
+      --wundt-gris-2: #e4e4e7;
+      --wundt-gris-3: #a1a1aa;
+      --wundt-gris-4: #52525b;
+      --wundt-gris-5: #27272a;
+      --wundt-gris-6: #18181b;
+      --wundt-negro: #0a0a0a;
+    }
+    html, body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    h1, h2, h3, .wundt-display { font-family: 'Manrope', 'Inter', sans-serif; letter-spacing: -0.01em; }
+
+    /* === Fondo del body: imagen a pantalla completa + Ken Burns + overlay oscuro === */
+    body {
+      background: url("../compartido/assets/img/5.jpg") center / cover no-repeat fixed !important;
+      background-attachment: fixed !important;
+      background-size: cover !important;
+      min-height: 100vh;
+      transition: background 0.4s ease;
+    }
+    /* Cuando el usuario ya está autenticado (dashboard visible), quitar el fondo */
+    body.dashboard-active {
+      background: #f4f4f5 !important;
+    }
+    /* Cuando el login está activo (#loginArea visible), ocultar el header principal.
+       Usamos :has() del contenedor padre que contiene ambos. */
+    .max-w-4xl:has(#loginArea:not(.hidden)) > header { display: none; }
+    .max-w-4xl:has(#loginArea:not(.hidden)) { padding-top: 1rem; }
+    body::before {
+      /* overlay oscuro para legibilidad del cristal */
+      content: "";
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      pointer-events: none;
+      z-index: 0;
+      animation: bgZoom 22s ease-in-out infinite alternate;
+      transform-origin: 50% 50%;
+      transition: opacity 0.4s ease;
+    }
+    /* Quitar overlay y Ken Burns cuando el dashboard está activo */
+    body.dashboard-active::before { display: none; }
+    body.dashboard-active::after { display: none; }
+    @keyframes bgZoom {
+      0%   { transform: scale(1.0); }
+      100% { transform: scale(1.10); }
+    }
+    body > * { position: relative; z-index: 1; }
+
+    /* === Avatar ovalado con inicial === */
+    .wundt-avatar {
+      width: 88px; height: 88px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e4e4e7 0%, #a1a1aa 60%, #71717a 100%);
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #18181b; font-weight: 800; font-size: 2rem;
+      box-shadow: inset 0 -6px 12px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.06);
+      border: 2px solid #d4d4d8;
+      flex-shrink: 0;
+    }
+    /* P38 (2026-08-26): avatar con imagen real (genérica para todos los alumnos
+       hasta que se agregue foto por alumno). Mismo tamaño + clip circular. */
+    .wundt-avatar-img {
+      width: 88px; height: 88px;
+      border-radius: 50%;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: #f4f4f5;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+      border: 2px solid #d4d4d8;
+    }
+    .wundt-avatar-img img { display: block; }
+    .wundt-avatar-lg { width: 128px; height: 128px; font-size: 3rem; }
+
+    /* === Logo marco (header grande) === */
+    .wundt-logo {
+      width: 168px; height: 168px;
+      border-radius: 32px;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .wundt-logo img { width: 100%; height: 100%; object-fit: contain; }
+
+    /* === Header: solo logo + nombre (sin siluetas) === */
+    .wundt-hero {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 1.25rem; text-align: center;
+    }
+
+    /* === Botón guinda === */
+    .btn-guinda {
+      background: linear-gradient(180deg, var(--wundt-guinda-claro) 0%, var(--wundt-guinda) 60%, var(--wundt-guinda-oscuro) 100%);
+      color: #fff;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.2) inset, 0 6px 16px -6px rgba(122,29,44,0.5);
+      transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+    }
+    .btn-guinda:hover { filter: brightness(1.05); transform: translateY(-1px); }
+    .btn-guinda:active { transform: translateY(0); }
+    .btn-guinda:disabled { opacity: .6; cursor: not-allowed; }
+
+    .btn-ghost-dark {
+      background: #18181b; color: #fafafa;
+      transition: background .15s ease, transform .15s ease;
+    }
+    .btn-ghost-dark:hover { background: #27272a; }
+
+    /* === Caja de cristal transparente a pantalla completa (vidrio + rayo de luz) === */
+    #loginArea {
+      display: flex; align-items: center; justify-content: center;
+      min-height: calc(100vh - 280px);
+      padding: 1.5rem;
+    }
+    .hidden { display: none !important; }
+    .login-glass {
+      position: relative;
+      overflow: hidden;
+      max-width: 28rem; width: 100%;
+      background: rgba(255, 255, 255, 0.10);
+      backdrop-filter: blur(20px) saturate(1.2);
+      -webkit-backdrop-filter: blur(20px) saturate(1.2);
+      border-radius: 24px;
+      padding: 2rem 1.75rem;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.25) inset,
+        0 30px 80px -20px rgba(0,0,0,0.45);
+      color: #ffffff;
+    }
+    @media (min-width: 768px) {
+      .login-glass { padding: 2.5rem 2.25rem; }
+    }
+    /* Tipografía clara sobre el cristal */
+    .login-glass h2, .login-glass label span { color: #ffffff; }
+    .login-glass p.text-zinc-600 { color: rgba(255,255,255,0.78) !important; }
+    /* Inputs semitransparentes estilo glassmorphism */
+    .login-glass input {
+      background-color: rgba(255, 255, 255, 0.15) !important;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.28) !important;
+      border-radius: 14px;
+      color: #ffffff;
+      transition: all 0.3s ease;
+    }
+    .login-glass input::placeholder { color: rgba(255,255,255,0.72); }
+    .login-glass input:focus {
+      outline: none;
+      border: 1px solid rgba(255, 255, 255, 0.6) !important;
+      box-shadow: 0 0 24px rgba(255, 255, 255, 0.28);
+      background-color: rgba(255, 255, 255, 0.22) !important;
+    }
+    /* Botón guinda con hover amarillo */
+    .login-glass .btn-guinda {
+      background-color: #C0392B;
+      background-image: none;
+      color: #ffffff;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      transition: all 0.3s ease;
+    }
+    .login-glass .btn-guinda:hover {
+      background-color: #F1C40F;
+      background-image: none;
+      color: #34495E;
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(241, 196, 15, 0.4);
+      filter: none;
+    }
+    .login-glass .text-zinc-500 { color: rgba(255,255,255,0.7) !important; }
+
+    /* === Rayo de luz continuo atravesando la caja de cristal === */
+    .login-glass::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -120%;
+      width: 60%; height: 100%;
+      background: linear-gradient(
+        to right,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.28) 50%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      transform: skewX(-22deg);
+      animation: lightSweep 4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes lightSweep {
+      0%   { left: -120%; }
+      60%  { left: 120%; }
+      100% { left: 120%; }
+    }
+
+    /* === Logo circular blanco (igual que ejemplo) === */
+    .wundt-logo {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: #ffffff;
+      padding: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      box-shadow:
+        0 0 0 4px rgba(255,255,255,0.15),
+        0 18px 50px -10px rgba(0,0,0,0.45);
+      flex-shrink: 0;
+    }
+    .wundt-logo img { width: 100%; height: 100%; object-fit: contain; }
+    .wundt-hero h1 { color: #ffffff; text-shadow: 0 2px 16px rgba(0,0,0,0.5); }
+    .wundt-hero p  { color: rgba(255,255,255,0.82) !important; }
+
+    /* === Light sweep sobre el logo del instituto (barrido de luz) === */
+    .light-sweep {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+      border-radius: 50%;
+    }
+    .light-sweep::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -150%;
+      width: 100%; height: 100%;
+      background: linear-gradient(
+        to right,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.45) 50%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      transform: skewX(-25deg);
+      animation: sweep 4s ease-in-out infinite;
+      animation-delay: 1s;
+      pointer-events: none;
+    }
+    @keyframes sweep {
+      0%   { left: -150%; }
+      55%  { left: 150%; }
+      100% { left: 150%; }
+    }
+
+    /* === Odómetro (más vistoso) === */
+    .odometro {
+      font-variant-numeric: tabular-nums;
+      font-family: 'Manrope', 'Inter', monospace;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 2px;
+      font-size: clamp(1.9rem, 4.5vw, 2.6rem);
+      line-height: 1.05;
+    }
+    .odometro .dig {
+      display: inline-block;
+      min-width: 0.72em;
+      text-align: center;
+      background: linear-gradient(180deg, #fafafa 0%, #e4e4e7 100%);
+      color: #18181b;
+      border-radius: 0.22em;
+      padding: 0.12em 0.10em 0.06em;
+      margin: 0 1px;
+      box-shadow:
+        inset 0 -3px 0 rgba(0,0,0,0.10),
+        inset 0 1px 0 rgba(255,255,255,0.95),
+        0 2px 0 rgba(0,0,0,0.05),
+        0 6px 14px -8px rgba(0,0,0,0.25);
+      transform-style: preserve-3d;
+      animation: digFlip .55s cubic-bezier(.2,.7,.3,1.2) both;
+      transform-origin: 50% 100%;
+    }
+    @keyframes digFlip {
+      0%   { transform: rotateX(-90deg); opacity: 0; }
+      60%  { transform: rotateX(8deg);   opacity: 1; }
+      100% { transform: rotateX(0deg);   opacity: 1; }
+    }
+    .odometro .sep {
+      color: #a1a1aa; padding: 0 2px;
+      animation: digFlip .55s cubic-bezier(.2,.7,.3,1.2) both;
+      transform-origin: 50% 100%;
+    }
+    .odometro.guinda .dig {
+      background: linear-gradient(180deg, #9c2a3d 0%, #7a1d2c 60%, #5a1620 100%);
+      color: #fff;
+      box-shadow:
+        inset 0 -3px 0 rgba(0,0,0,0.30),
+        inset 0 1px 0 rgba(255,255,255,0.18),
+        0 2px 0 rgba(0,0,0,0.12),
+        0 8px 18px -8px rgba(122,29,44,0.45);
+    }
+    .odometro.negro .dig {
+      background: linear-gradient(180deg, #27272a 0%, #18181b 100%);
+      color: #fafafa;
+      box-shadow:
+        inset 0 -3px 0 rgba(255,255,255,0.08),
+        inset 0 1px 0 rgba(255,255,255,0.12),
+        0 2px 0 rgba(0,0,0,0.12),
+        0 8px 18px -8px rgba(0,0,0,0.35);
+    }
+
+    /* === Tarjeta de evaluación === */
+    .ev-card {
+      background: #ffffff;
+      border-radius: 24px;
+      border: 1px solid #e4e4e7;
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.9) inset,
+        0 10px 30px -12px rgba(0,0,0,0.08),
+        0 2px 6px -2px rgba(0,0,0,0.04);
+      overflow: hidden;
+    }
+    .ev-card header {
+      background: linear-gradient(180deg, #fafafa 0%, #f4f4f5 100%);
+      border-bottom: 1px solid #e4e4e7;
+      padding: 1.25rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    @media (min-width: 768px) { .ev-card header { padding: 1.5rem 2rem; } }
+
+    .semaforo-chip {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .semaforo-chip::before {
+      content: ""; width: 8px; height: 8px; border-radius: 999px; background: currentColor;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.6) inset;
+    }
+    .semaforo-Verde { background: #ecfdf5; color: #047857; }
+    .semaforo-Amarillo { background: #fef3c7; color: #92400e; }
+    .semaforo-Rojo { background: #fee2e2; color: #b91c1c; }
+
+    /* === Bloques de métricas (estilo "display") === */
+    .metric-block {
+      border-radius: 18px;
+      padding: 1rem 1.1rem;
+      background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+      border: 1px solid #e4e4e7;
+      position: relative;
+      overflow: hidden;
+    }
+    .metric-block::before {
+      content: "";
+      position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+      background: var(--accent, #18181b);
+      border-radius: 4px 0 0 4px;
+    }
+    .metric-block .label {
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #52525b;
+      margin-bottom: 0.35rem;
+    }
+    .metric-block .sub {
+      font-size: 0.7rem;
+      color: #71717a;
+      margin-top: 0.25rem;
+    }
+    .metric-block.negro { --accent: #18181b; }
+    .metric-block.guinda { --accent: #7a1d2c; }
+    .metric-block.gris { --accent: #71717a; }
+
+    /* === Mensaje del maestro === */
+    .maestro-msg {
+      background: linear-gradient(180deg, #fff7f8 0%, #fef2f3 100%);
+      border: 1px solid #f3d4d8;
+      border-left: 4px solid var(--wundt-guinda);
+      border-radius: 16px;
+      padding: 1rem 1.15rem;
+    }
+
+    /* === Botones de acción tarjeta === */
+    .btn-card {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      border-radius: 12px;
+      font-weight: 700; font-size: 0.85rem;
+      transition: background .15s ease, transform .1s ease, border-color .15s ease;
+      border: 1px solid #e4e4e7;
+      background: #fafafa; color: #18181b;
+    }
+    .btn-card:hover { background: #f4f4f5; border-color: #d4d4d8; }
+    .btn-card.guinda {
+      background: #7a1d2c; color: #fff; border-color: #7a1d2c;
+    }
+    .btn-card.guinda:hover { background: #5a1620; }
+    .btn-card.is-playing {
+      background: #18181b; color: #fafafa; border-color: #18181b;
+      animation: pulse-soft 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse-soft {
+      0%,100% { box-shadow: 0 0 0 0 rgba(24,24,27,0.35); }
+      50%     { box-shadow: 0 0 0 6px rgba(24,24,27,0.0); }
+    }
+
+    /* === Detalle narrativa === */
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    .summary-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.9rem 1.5rem;
+      border-top: 1px solid #e4e4e7;
+      font-weight: 700; color: #27272a;
+    }
+    @media (min-width: 768px) { .summary-row { padding: 1rem 2rem; } }
+    .summary-row:hover { background: #fafafa; }
+    .summary-chev { transition: transform .2s ease; }
+    details[open] .summary-chev { transform: rotate(180deg); }
+
+    /* === Animación de entrada === */
+    .fade-in { animation: fadeIn .4s ease both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* === Impresión: una sola tarjeta, hoja carta, diseño institucional P40 === */
+    @page { size: letter; margin: 1.2cm; }
+    @media print {
+      html, body { background: #fff !important; }
+      body::before { display: none !important; }
+      body > * { position: static; }
+
+      /* Esconder todo lo que no sea la tarjeta activa */
+      header, #loginArea, .no-print { display: none !important; }
+      #dashboardArea > :not(#historial) { display: none !important; }
+
+      /* Mostrar SOLO la tarjeta que se está exportando */
+      #historial > * { display: none !important; }
+      #historial > article.print-target { display: block !important; }
+
+      article.print-target {
+        box-shadow: none !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        page-break-inside: avoid; break-inside: avoid;
+        padding: 0 !important;
+        background: #fff !important;
+      }
+      article.print-target header {
+        background: #7a1d2c !important;
+        color: #fff !important;
+        border-bottom: 3px solid #5a1620 !important;
+        padding: 0.5cm 0.6cm !important;
+      }
+      article.print-target header h3,
+      article.print-target header p { color: #fff !important; }
+      article.print-target .odometro { font-size: 2.3rem !important; }
+      article.print-target .metric-block {
+        background: #fafafa !important;
+        border: 1px solid #d4d4d8 !important;
+      }
+      article.print-target .maestro-msg {
+        background: #fef9c3 !important;
+        border: 1px solid #fbbf24 !important;
+        border-left: 4px solid #7a1d2c !important;
+      }
+
+      details { open: true; }
+      details > div { display: block !important; }
+      .summary-row { display: none !important; }
+      .print-only { display: block !important; }
+
+      /* P40: header institucional SOLO en impresión, antes del contenido */
+      .print-header-inst {
+        display: flex !important;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #7a1d2c;
+        margin-bottom: 12px;
+      }
+      .print-header-inst img {
+        width: 48px; height: 48px;
+        border-radius: 50%;
+        background: #fff;
+        padding: 4px;
+        box-shadow: 0 0 0 1px #d4d4d8;
+      }
+      .print-header-inst h4 {
+        margin: 0;
+        font-family: 'Manrope', sans-serif;
+        font-size: 1rem;
+        font-weight: 800;
+        color: #7a1d2c;
+        line-height: 1.1;
+      }
+      .print-header-inst p {
+        margin: 0;
+        font-size: 0.7rem;
+        color: #52525b;
+      }
+
+      /* P40: footer formal con espacio para firma del tutor */
+      .print-footer-formal {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.2cm;
+        margin-top: 0.7cm;
+        padding-top: 0.5cm;
+        border-top: 1.5px solid #18181b;
+        page-break-inside: avoid;
+      }
+      .print-footer-formal .firma-block {
+        text-align: center;
+      }
+      .print-footer-formal .firma-line {
+        border-top: 1.5px solid #18181b;
+        margin-top: 1.4cm;
+        padding-top: 4px;
+        font-size: 0.75rem;
+        color: #18181b;
+        font-weight: 600;
+      }
+      .print-footer-formal .firma-sub {
+        font-size: 0.65rem;
+        color: #52525b;
+        margin-top: 2px;
+      }
+      .print-footer-formal .doc-info {
+        font-size: 0.7rem;
+        color: #27272a;
+        line-height: 1.4;
+        text-align: left;
+        align-self: end;
+      }
+      .print-footer-formal .doc-info strong { color: #7a1d2c; }
+    }
+    .print-only { display: none; }
+
+    /* === Pequeños ajustes responsivos === */
+    @media (max-width: 640px) {
+      .wundt-logo { width: 128px; height: 128px; border-radius: 26px; }
+      .wundt-avatar { width: 72px; height: 72px; font-size: 1.6rem; }
+      .wundt-silueta { width: 64px; height: 64px; }
+      .wundt-hero-row { gap: 1rem; }
+      .wundt-hero-titles { text-align: center; }
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <div class="max-w-4xl mx-auto p-4 md:p-8">
+
+    <!-- ============ HEADER ============ -->
+    <header class="mb-8 md:mb-12 fade-in">
+      <div class="wundt-hero">
+        <div class="wundt-logo light-sweep">
+          <img src="../compartido/assets/img/will_transparent.png"
+               alt="Instituto Wilhelm Wundt"
+               onerror="this.outerHTML='<div class=\'text-4xl font-black text-zinc-700\'>W</div>'">
+        </div>
+        <div class="text-center">
+          <h1 class="wundt-display text-3xl md:text-5xl font-black leading-tight">
+            Instituto <span class="text-[color:var(--wundt-guinda)]">Wilhelm Wundt</span>
+          </h1>
+          <p class="text-sm md:text-base mt-1">Portal de Consulta Académica</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ LOGIN ============ -->
+    <div id="loginArea" class="fade-in">
+      <div class="login-glass">
+        <!-- Logo circular blanco con rayo de luz (idéntico al ejemplo) -->
+        <div class="wundt-logo light-sweep" style="margin: -3.5rem auto 0.75rem;">
+          <img src="../compartido/assets/img/will_transparent.png"
+               alt="Instituto Wilhelm Wundt"
+               onerror="this.outerHTML='<div class=\'text-3xl font-black text-zinc-700\'>W</div>'">
+        </div>
+        <h2 class="wundt-display text-2xl md:text-3xl font-extrabold mb-1 text-center">Instituto Wilhelm Wundt</h2>
+        <p class="text-sm text-zinc-600 mb-6 text-center">Acceso a Resultados — Ingresa el ID y PIN que te proporcionó la escuela.</p>
+
+        <label class="block mb-3">
+          <span class="text-xs font-bold uppercase tracking-wider">ID del Alumno</span>
+          <input type="text" id="alumnoId" placeholder="Ej. 2.5"
+                 class="w-full p-3 mt-1 outline-none"
+                 autocomplete="username">
+        </label>
+
+        <label class="block mb-4">
+          <span class="text-xs font-bold uppercase tracking-wider">PIN de Acceso</span>
+          <input type="password" id="pin" placeholder="4 dígitos" inputmode="numeric"
+                 class="w-full p-3 mt-1 outline-none"
+                 autocomplete="current-password" maxlength="4">
+        </label>
+
+        <div id="loginError" class="text-red-300 text-sm mb-3 font-medium"></div>
+
+        <button id="btnLogin" onclick="handleLogin()"
+                class="w-full btn-guinda py-3 rounded-xl font-bold text-base">
+          Consultar
+        </button>
+        <p class="text-xs text-zinc-500 text-center mt-4">
+          ¿No tienes PIN? Contacta al administrador.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============ DASHBOARD ============ -->
+    <div id="dashboardArea" class="hidden flex-col gap-6">
+
+      <!-- Tarjeta de identidad del alumno -->
+      <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-zinc-200 flex items-center gap-5 fade-in">
+        <div id="alumnoAvatar" class="wundt-avatar-img" aria-hidden="true">
+          <img src="../compartido/assets/img/persons.jpg" alt="" class="w-full h-full object-cover"
+               onerror="this.outerHTML='<div class=&quot;wundt-avatar&quot;>W</div>'">
+        </div>
+        <div class="flex-1 min-w-0">
+          <h2 id="alumnoNombreHeader" class="wundt-display text-xl md:text-2xl font-extrabold text-zinc-900 truncate"></h2>
+          <p id="alumnoMetaHeader" class="text-xs text-zinc-500 mt-0.5"></p>
+          <p class="text-xs text-zinc-500 mt-1">
+            <span id="maestroLabel"></span>
+          </p>
+        </div>
+        <button onclick="logout()" class="no-print text-zinc-400 hover:text-[color:var(--wundt-guinda)] text-sm font-bold underline transition">
+          Cerrar sesión
+        </button>
+      </div>
+
+      <!-- Contenedor del historial (lo pinta ui.js) -->
+      <div id="historial" class="grid grid-cols-1 gap-6"></div>
+
+    </div>
+
+  </div>
+
+  <script type="module" src="assets/js/ui.js?v=8"></script>
+  <script>
+    // P32 (2026-08-26): registro del Service Worker para PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../compartido/sw.js')
+          .then(reg => console.log('[PWA] Service Worker registrado:', reg.scope))
+          .catch(err => console.warn('[PWA] No se pudo registrar el SW:', err));
+      });
+    }
+  </script>
+</body>
+</html>
