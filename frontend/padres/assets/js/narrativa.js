@@ -134,9 +134,19 @@ function reglaCompetencias(ev) {
 }
 
 /**
+ * Frase sobre el índice global.
+ */
+function reglaIndice(ev) {
+  const i = parseFloat(ev.indice || 0);
+  if (isNaN(i)) return '';
+  return `El índice global de este mes es de ${i.toFixed(2)}/10. Este resultado refleja el desempeño integral del alumno, considerando su calificación, asistencia y competencias socioemocionales.`;
+}
+
+/**
  * Observaciones literales del maestro entre comillas, si existen.
  */
 function reglaObservaciones(ev) {
+
   const obs = String(ev.observaciones || '').trim();
   if (!obs) return '';
   return `"${obs}"`;
@@ -285,6 +295,7 @@ function generarNarrativaNumerica(ev) {
   partes.push(reglaAsistencia(ev));
   partes.push(reglaTareas(ev));
   partes.push(reglaCompetencias(ev));
+  partes.push(reglaIndice(ev));
 
   const obs = reglaObservaciones(ev);
   if (obs) {

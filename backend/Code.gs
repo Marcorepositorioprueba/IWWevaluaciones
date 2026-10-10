@@ -150,8 +150,18 @@ function accionAuthPadre_(body) {
 
   // Verifica que el alumno exista
   const alumnos = leerFilas('ALUMNOS').filas;
-  const alumno = alumnos.find(a => String(a.AlumnoID || '').trim() === v.datos.alumnoId);
-  if (!alumno) return { ok: false, error: 'Alumno no encontrado', errorCode: 'AUTH_FAILED' };
+  const alumno = alumnos.find(a => {
+    const idSheet = String(a.AlumnoID || '').trim();
+    const idInput = String(v.datos.alumnoId || '').trim();
+    if (idSheet === idInput) return true;
+    // Comparación numérica para casos como 1.10 === 1.1
+    if (!isNaN(idSheet) && !isNaN(idInput)) {
+      return parseFloat(idSheet) === parseFloat(idInput);
+    }
+    return false;
+  });
+  if (!//Cortesía de la herramienta de edición para mantener el flujo
+  !alumno) return { ok: false, error: 'Alumno no encontrado', errorCode: 'AUTH_FAILED' };
 
   // Busca acceso activo
   const accesos = leerFilas('ACCESOS_PADRES').filas;

@@ -43,6 +43,7 @@ window.handleLogin = async () => {
   btn.textContent = 'Verificando...';
 
   try {
+    // Enviamos el alumnoId ya limpio con .trim() para evitar errores de espacios invisibles
     const resp = await authPadre(alumnoId, pin);
     if (!resp.ok) {
       errEl.textContent = resp.error || 'No fue posible iniciar sesión.';
@@ -52,7 +53,7 @@ window.handleLogin = async () => {
     }
     sesion = {
       alumnoId: resp.alumnoId,
-      nombreAlumno: resp.nombreAlumno,
+      nombreNombre: resp.nombreAlumno,
       sesionToken: resp.sesionToken,
       expiraEn: resp.expiraEn
     };

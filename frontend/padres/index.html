@@ -611,11 +611,21 @@
                  autocomplete="username">
         </label>
 
-        <label class="block mb-4">
+        <label class="block mb-4 relative">
           <span class="text-xs font-bold uppercase tracking-wider">PIN de Acceso</span>
-          <input type="password" id="pin" placeholder="4 dígitos" inputmode="numeric"
-                 class="w-full p-3 mt-1 outline-none"
-                 autocomplete="current-password" maxlength="4">
+          <div class="relative">
+            <input type="password" id="pin" placeholder="4 dígitos" inputmode="numeric"
+                   class="w-full p-3 mt-1 outline-none pr-10"
+                   autocomplete="current-password" maxlength="4">
+            <button type="button"
+                    onmousedown="document.getElementById('pin').type='text'"
+                    onmouseup="document.getElementById('pin').type='password'"
+                    onmouseleave="document.getElementById('pin').type='password'"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+                    title="Mantén presionado para ver el PIN">
+              👁️
+            </button>
+          </div>
         </label>
 
         <div id="loginError" class="text-red-300 text-sm mb-3 font-medium"></div>
