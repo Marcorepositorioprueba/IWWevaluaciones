@@ -604,10 +604,10 @@ function renderBloqueFormativosPadres(ev) {
  */
 function renderPesosIndice_() {
   const pesos = [
-    { k: 'cal',     nombre: 'Calificación',  pct: 35, color: '#7a1d2c' },
-    { k: 'asi',     nombre: 'Asistencia',    pct: 25, color: '#0891b2' },
-    { k: 'tar',     nombre: 'Tareas',        pct: 15, color: '#ca8a04' },
-    { k: 'comp',    nombre: 'Competencias',  pct: 25, color: '#15803d' }
+    { k: 'cal',     nombre: 'Calificación',  pct: 25, color: '#7a1d2c' },
+    { k: 'asi',     nombre: 'Asistencia',    pct: 15, color: '#0891b2' },
+    { k: 'tar',     nombre: 'Actividades o Entregables',  pct: 25, color: '#ca8a04' },
+    { k: 'comp',    nombre: 'Competencias',  pct: 35, color: '#15803d' }
   ];
   const chips = pesos.map(p => `
     <div class="peso-chip" style="border-color:${p.color};">

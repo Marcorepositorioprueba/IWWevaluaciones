@@ -310,7 +310,20 @@
     </div>
   </div>
 
+  <!-- ============ MODAL DE INACTIVIDAD (Timer 3 min) ============ -->
+  <div id="modalInactividad" class="hidden fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-4 border-amber-400">
+      <div class="text-5xl mb-4">⚠️</div>
+      <h3 class="text-xl font-bold text-slate-800 mb-2">¿Sigues ahí?</h3>
+      <p class="text-slate-600 mb-6">Tu sesión expirará pronto por inactividad para proteger los datos.</p>
+      <button id="btnMantenerSesion" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition">
+        Sí, sigo aquí
+      </button>
+    </div>
+  </div>
+
   <script type="module" src="assets/js/ui.js?v=13"></script>
+  <script src="assets/js/print_helper.js"></script>
   <script>
     // P32 (2026-08-26): registro del Service Worker para PWA
     if ('serviceWorker' in navigator) {

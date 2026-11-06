@@ -63,7 +63,29 @@ const FORMULAS_INDICE_ = {
     const pCom = ((compSum - 4) / 12) * 2.5;           // 0-2.5 (25% de 10)
 
     return normalizarIndice_(pCal + pAsi + pTar + pCom);
+  },
+
+  // v3 = Nueva distribución solicitada (25/15/25/35).
+  // Cambios: Tareas ahora se reciben como porcentaje (0-100%).
+  v3: function (ev) {
+    const cal = parseFloat(ev.calificacion) || 0;
+    const asi = parseFloat(ev.asistencia) || 0;
+    const tar = Math.min(parseFloat(ev.tareas) || 0, 100); // Seguridad: top 100%
+    const pc = parseFloat(ev.pensamiento) || 1;
+    const pa = parseFloat(ev.participacion) || 1;
+    const au = parseFloat(ev.autogestion) || 1;
+    const co = parseFloat(ev.colaboracion) || 1;
+
+    // Nueva Distribución 25/15/25/35 escalada a 0-10
+    const pCal = (cal / 10) * 2.5;                    // 0-2.5 (25% de 10)
+    const pAsi = (asi / 100) * 1.5;                   // 0-1.5 (15% de 10)
+    const pTar = (tar / 100) * 2.5;                   // 0-2.5 (25% de 10)
+    const compSum = pc + pa + au + co;                 // 4-16 (4 competencias de 1-4)
+    const pCom = ((compSum - 4) / 12) * 3.5;           // 0-3.5 (35% de 10)
+
+    return normalizarIndice_(pCal + pAsi + pTar + pCom);
   }
+
 };
 
 /**

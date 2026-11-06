@@ -15,6 +15,7 @@ import { vozSoportada, iniciarDictado, pararDictado } from './voz.js';
 // === Estado singleton ===
 
 let state = crearState();
+window.state = state; // Exponer estado para helpers externos (ej. print_helper.js)
 let charts = { semaforo: null, evolucion: null };
 
 // Guardar evaluaciones en localStorage para persistir entre recargas
@@ -63,6 +64,7 @@ window.addEventListener('DOMContentLoaded', () => {
     state.expiraEn = ses.expiraEn;
     state.ultimoAcceso = ses.ultimoAcceso || null;
     mostrarApp();
+    iniciarTimerInactividad();
   } else {
     localStorage.removeItem('wundtEvaluaciones');
     mostrarLogin();
@@ -502,6 +504,10 @@ function renderModalCualitativo(alumnoId, alumno, ev, esEdicion, vozBtn) {
       <button onclick="cerrarPanel()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold transition">
         Cancelar
       </button>
+      ${esCualitativo(alumno) ? `
+      <button onclick="window.imprimirDetallePreescolar('${alumnoId}')" class="flex-1 bg-white border border-slate-300 text-slate-700 py-3 rounded-xl font-bold transition hover:bg-slate-50 shadow-sm">
+        🖨️ Imprimir Detalle
+      </button>` : ''}
       <button onclick="guardarPanelActual('${alumnoId}')" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition shadow-md">
         Guardar cambios
       </button>
@@ -601,7 +607,7 @@ function renderModalNumerico(alumnoId, alumno, ev, esEdicion, vozBtn) {
         <span class="error-msg" id="err_asi_${alumnoId}"></span>
       </label>
       <label class="block">
-        <span class="text-xs font-bold text-slate-600 uppercase">Tareas (0-15)</span>
+        <span class="text-xs font-bold text-slate-600 uppercase">Entregables o actividades %</span>
         <div class="flex gap-1 mt-1">
           <input type="number" step="1" id="tar_${alumnoId}"
             value="${escapeAttr(ev.tareas)}"
@@ -651,6 +657,10 @@ function renderModalNumerico(alumnoId, alumno, ev, esEdicion, vozBtn) {
       <button onclick="cerrarPanel()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold transition">
         Cancelar
       </button>
+      ${esCualitativo(alumno) ? `
+      <button onclick="window.imprimirDetallePreescolar('${alumnoId}')" class="flex-1 bg-white border border-slate-300 text-slate-700 py-3 rounded-xl font-bold transition hover:bg-slate-50 shadow-sm">
+        🖨️ Imprimir Detalle
+      </button>` : ''}
       <button onclick="guardarPanelActual('${alumnoId}')" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition shadow-md">
         Guardar cambios
       </button>
@@ -882,7 +892,7 @@ window.onCambio = (alumnoId, campo, valor) => {
     if (valor !== '' && (isNaN(v) || v < 0 || v > 100)) { invalido = true; msg = 'Entre 0 y 100'; }
   } else if (campo === 'tareas') {
     const v = parseInt(valor, 10);
-    if (valor !== '' && (isNaN(v) || v < 0 || v > 15)) { invalido = true; msg = 'Entre 0 y 15'; }
+    if (valor !== '' && (isNaN(v) || v < 0 || v > 100)) { invalido = true; msg = 'Entre 0 y 100'; }
   }
   if (input) {
     if (invalido) input.classList.add('error');
@@ -1880,4 +1890,79 @@ function escapeAttr(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
+}
+
+// ============================================================================
+// Timer de Inactividad (3 minutos)
+// ============================================================================
+
+// [ENCAPSULADO] Inyector de Botón de Impresión Preescolar
+// Evita modificar renderModalCualitativo directamente para mantener estabilidad.
+(function() {
+  const originalAbrirPanel = window.abrirPanel;
+  window.abrirPanel = function(alumnoId) {
+    originalAbrirPanel(alumnoId);
+
+    // Esperar un momento a que el DOM se renderice
+    setTimeout(() => {
+      const alumno = state.alumnos.find(a => a.alumnoId === alumnoId);
+      if (alumno && esCualitativo(alumno)) {
+        const btnContainer = document.querySelector('#contenidoPanel .flex.gap-2');
+        if (btnContainer && !document.getElementById('btnImprimirDetalle')) {
+          const btnImp = document.createElement('button');
+          btnImp.id = 'btnImprimirDetalle';
+          btnImp.className = 'flex-1 bg-white border border-slate-300 text-slate-700 py-3 rounded-xl font-bold transition hover:bg-slate-50 shadow-sm';
+          btnImp.innerHTML = '🖨️ Imprimir Detalle';
+          btnImp.onclick = () => window.imprimirDetallePreescolar(alumnoId);
+
+          // Insertar al principio de la fila de botones
+          btnContainer.prepend(btnImp);
+        }
+      }
+    }, 50);
+  };
+})();
+
+let timerInactividad = null;
+let timerExpiracion = null;
+const TIEMPO_INACTIVIDAD = 3 * 60 * 1000; // 3 minutos
+const TIEMPO_ADVERTENCIA = 30 * 1000;      // 30 segundos para reaccionar
+
+function reiniciarTimerInactividad() {
+  if (timerInactividad) clearTimeout(timerInactividad);
+  if (timerExpiracion) clearTimeout(timerExpiracion);
+  document.getElementById('modalInactividad')?.classList.add('hidden');
+
+  timerInactividad = setTimeout(() => {
+    mostrarAdvertenciaInactividad();
+  }, TIEMPO_INACTIVIDAD);
+}
+
+window.mostrarAdvertenciaInactividad = function mostrarAdvertenciaInactividad() {
+  const modal = document.getElementById('modalInactividad');
+  if (modal) {
+    modal.classList.remove('hidden');
+    // Si en 30 segundos no responde, logout
+    timerExpiracion = setTimeout(() => {
+      logout();
+    }, TIEMPO_ADVERTENCIA);
+  }
+}
+
+function iniciarTimerInactividad() {
+  // Eventos que cuentan como actividad
+  const eventos = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+  eventos.forEach(ev => {
+    window.addEventListener(ev, reiniciarTimerInactividad);
+  });
+
+  // Botón "Sigo aquí"
+  const btn = document.getElementById('btnMantenerSesion');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      reiniciarTimerInactividad();
+    });
+  }
+
+  reiniciarTimerInactividad();
 }
