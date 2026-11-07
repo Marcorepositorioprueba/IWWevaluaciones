@@ -313,7 +313,7 @@ export function validarParaEnvio(ev, cualitativo = false) {
   const asi = parseInt(ev.asistencia, 10);
   if (isNaN(asi) || asi < 0 || asi > 100) errores.push({ campo: 'asistencia', msg: 'Asistencia entre 0 y 100' });
   const tar = parseInt(ev.tareas, 10);
-  if (isNaN(tar) || tar < 0 || tar > 15) errores.push({ campo: 'tareas', msg: 'Tareas entre 0 y 15' });
+  if (isNaN(tar) || tar < 0 || tar > 100) errores.push({ campo: 'tareas', msg: 'Entregables entre 0 y 100%' });
   const obs = String(ev.observaciones || '');
   if (obs.length > 500) errores.push({ campo: 'observaciones', msg: 'Máx 500 caracteres' });
   return { ok: errores.length === 0, errores: errores };
